@@ -22,18 +22,25 @@ async function fetchHtml(url: string, referer?: string): Promise<string> {
 
 function extractHrefLinks(
   html: string,
-  pattern: RegExp
+  pattern: RegExp,
+  fallbackName = ""
 ): { name: string; url: string }[] {
   const links: { name: string; url: string }[] = [];
   let m: RegExpExecArray | null;
   while ((m = pattern.exec(html)) !== null) {
     const url = m[1];
-    const name = (m[2] || "").replace(/<[^>]+>/g, "").trim();
+    const name = (m[2] || fallbackName).replace(/<[^>]+>/g, "").trim();
     if (url && name && !links.find((l) => l.url === url)) {
       links.push({ name, url });
     }
   }
   return links;
+}
+
+function dedupeLinks(links: { name: string; url: string }[]) {
+  return links.filter((link, index, self) =>
+    index === self.findIndex((item) => item.url === link.url)
+  );
 }
 
 /**
@@ -82,10 +89,21 @@ async function resolveMoviesdaChain(
     /href="(https?:\/\/cdn\.[^"]+|https?:\/\/s\d+\.[^"]+\.(?:mp4|mkv)[^"]*)"[^>]*>([^<]+)/gi
   );
 
-  // Extract watch links - improved patterns to catch more streaming links
+  // Extract watch links directly from the resolved download page.
   let watchLinks = extractHrefLinks(
     html3,
     /href="(https?:\/\/(?:play|stream|watch|online|video)[^"]+|https?:\/\/[^"]*(?:stream|watch|play|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+  );
+
+  const watchSectionLinks = extractHrefLinks(
+    html3,
+    /Watch Online Links<\/div>[\s\S]*?<div class="download">[\s\S]*?href="(https?:\/\/[^"#]+)"[^>]*>([^<]+)</gi
+  );
+
+  const playOnestreamLinks = extractHrefLinks(
+    html3,
+    /href="(https?:\/\/play\.onestream\.today\/stream\/(?:page|video)\/\d+)"[^>]*>([^<]+)</gi,
+    "Watch Online"
   );
 
   console.log('Moviesda - Initial watch links:', watchLinks.length);
@@ -96,7 +114,8 @@ async function resolveMoviesdaChain(
   // Additional extraction for direct video streams that might not have proper text
   const directVideoLinks = extractHrefLinks(
     html3,
-    /href="(https?:\/\/[^"]*\.(?:mp4|m3u8|webm|mkv)[^"]*)"[^>]*>/gi
+    /href="(https?:\/\/[^"]*\.(?:mp4|m3u8|webm|mkv)[^"]*)"[^>]*>/gi,
+    "Direct stream"
   );
 
   // Specific pattern for moviesda streaming sites - handle actual flow pattern
@@ -194,10 +213,16 @@ async function resolveMoviesdaChain(
   );
 
   // Merge all watch links, removing duplicates
-  const allWatchLinks = [...watchLinks, ...resolvedMoviesdaLinks, ...onestreamVariations, ...directVideoLinks, ...streamingLinks];
-  watchLinks = allWatchLinks.filter((link, index, self) => 
-    index === self.findIndex((l) => l.url === link.url)
-  );
+  const allWatchLinks = [
+    ...watchLinks,
+    ...watchSectionLinks,
+    ...playOnestreamLinks,
+    ...resolvedMoviesdaLinks,
+    ...onestreamVariations,
+    ...directVideoLinks,
+    ...streamingLinks,
+  ];
+  watchLinks = dedupeLinks(allWatchLinks);
 
   // Debug logging for watch links
   console.log('Moviesda - Found watch links:', watchLinks.length);
@@ -284,10 +309,15 @@ async function resolveIsaidubChain(
     /href="(https?:\/\/s\d+\.dubshare\.[^"]+)"[^>]*>(Download[^<]+)/gi
   );
 
-  // Extract watch links - improved patterns to catch more streaming links
+  // Extract watch links directly from the resolved download page.
   let watchLinks = extractHrefLinks(
     html3,
     /href="(https?:\/\/(?:dub\.[^"]*stream|stream|watch|play|online|video)[^"]+|https?:\/\/[^"]*(?:stream|watch|play|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+  );
+
+  const watchSectionLinks = extractHrefLinks(
+    html3,
+    /Watch Online Links<\/div>[\s\S]*?<div class="download">[\s\S]*?href="(https?:\/\/[^"#]+)"[^>]*>([^<]+)</gi
   );
 
   console.log('Isaidub - Initial watch links:', watchLinks.length);
@@ -298,7 +328,8 @@ async function resolveIsaidubChain(
   // Specific pattern for onestream.today links found in isaidub
   const onestreamLinks = extractHrefLinks(
     html3,
-    /href="(https?:\/\/dub\.onestream\.today\/stream\/video\/\d+)"[^>]*>(Watch[^<]+)/gi
+    /href="(https?:\/\/(?:dub|play)\.onestream\.today\/stream\/(?:video|page)\/\d+)"[^>]*>([^<]+)</gi,
+    "Watch Online"
   );
 
   console.log('Isaidub - Onestream links found:', onestreamLinks.length);
@@ -324,7 +355,8 @@ async function resolveIsaidubChain(
   // Additional extraction for direct video streams that might not have proper text
   const directVideoLinks = extractHrefLinks(
     html3,
-    /href="(https?:\/\/[^"]*\.(?:mp4|m3u8|webm|mkv)[^"]*)"[^>]*>/gi
+    /href="(https?:\/\/[^"]*\.(?:mp4|m3u8|webm|mkv)[^"]*)"[^>]*>/gi,
+    "Direct stream"
   );
 
   // Additional extraction for streaming domains (specific to isaidub)
@@ -334,10 +366,14 @@ async function resolveIsaidubChain(
   );
 
   // Merge all watch links, removing duplicates
-  const allWatchLinks = [...watchLinks, ...resolvedOnestreamLinks, ...directVideoLinks, ...streamingLinks];
-  watchLinks = allWatchLinks.filter((link, index, self) => 
-    index === self.findIndex((l) => l.url === link.url)
-  );
+  const allWatchLinks = [
+    ...watchLinks,
+    ...watchSectionLinks,
+    ...resolvedOnestreamLinks,
+    ...directVideoLinks,
+    ...streamingLinks,
+  ];
+  watchLinks = dedupeLinks(allWatchLinks);
 
   // Debug logging for watch links
   console.log('Isaidub - Found watch links:', watchLinks.length);

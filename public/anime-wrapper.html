@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animes Collection - p.s movizs</title>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+   
+    
+    body {
+      background: #050505;
+      overflow: hidden;
+    }
+
+    .iframe-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Simple animated branding header */
+    .nav-header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(220, 38, 38, 0.1);
+      z-index: 100;
+      pointer-events: auto;
+      transition: height 0.3s ease;
+    }
+
+    .nav-header-content {
+      max-width: 768px;
+      margin: 0 auto;
+      padding: 0 16px;
+      height: 95px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .branding-container {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    .branding-text {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .branding-main {
+      font-family: Arial, sans-serif;
+      font-size: 24px;
+      font-weight: 900;
+      color: white;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      animation: slideInLeft 1s ease-out forwards;
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+
+    .branding-separator {
+      font-family: Arial, sans-serif;
+      font-size: 20px;
+      font-weight: 300;
+      color: #a1a1aa;
+      animation: slideInLeft 1s ease-out 0.3s forwards;
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+
+    .branding-subtitle {
+      font-family: Arial, sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #dc2626;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      animation: slideInLeft 1s ease-out 0.6s forwards;
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+
+    @keyframes slideInLeft {
+      0% {
+        opacity: 0;
+        transform: translateX(-100%);
+      }
+      100% {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    
+    .nav-header.search-mode {
+      height: 135px;
+    }
+
+    .nav-header.search-mode .nav-header-content {
+      height: 125px;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 640px) {
+      .nav-header-content {
+        height: 85px;
+        padding: 12px 16px;
+      }
+      
+      .nav-header.search-mode .nav-header-content {
+        height: 105px;
+      }
+      
+      .branding-container {
+        gap: 12px;
+      }
+      
+      .branding-logo {
+        height: 32px;
+      }
+      
+      .branding-main {
+        font-size: 18px;
+        letter-spacing: 1px;
+      }
+      
+      .branding-separator {
+        font-size: 16px;
+      }
+      
+      .branding-subtitle {
+        font-size: 14px;
+        letter-spacing: 2px;
+      }
+    }
+
+    @keyframes slideInLeft {
+      0% {
+        opacity: 0;
+        transform: translateX(-100%);
+      }
+      100% {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes glowPulse {
+      0%, 100% {
+        text-shadow: 0 0 15px rgba(220, 38, 38, 0.8), 0 0 30px rgba(220, 38, 38, 0.5);
+      }
+      50% {
+        text-shadow: 0 0 20px rgba(220, 38, 38, 1), 0 0 40px rgba(220, 38, 38, 0.8), 0 0 60px rgba(255, 107, 107, 0.6);
+      }
+    }
+
+    @keyframes logoPulse {
+      0%, 100% {
+        filter: drop-shadow(0 0 15px rgba(220, 38, 38, 0.6));
+        transform: scale(1);
+      }
+      50% {
+        filter: drop-shadow(0 0 25px rgba(220, 38, 38, 0.9)) drop-shadow(0 0 35px rgba(255, 107, 107, 0.5));
+        transform: scale(1.02);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="iframe-container">
+    <!-- Enhanced animated branding header -->
+    <header class="nav-header" id="navHeader">
+      <div class="nav-header-content">
+        <div class="branding-container">
+          <div class="branding-text">
+            <span class="branding-main">p.s movizs hub</span>
+            <span class="branding-separator">-</span>
+            <span class="branding-subtitle">anime collection</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Iframe -->
+    <iframe 
+      src="https://animesalt.ac/" 
+      id="animeFrame"
+      allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+      sandbox="allow-same-origin allow-scripts"
+    ></iframe>
+  </div>
+
+  <script>
+    // Block all popup attempts and new tab openings
+    window.addEventListener('message', function(event) {
+      // Block any message that tries to open new windows
+      if (event.data && typeof event.data === 'object') {
+        if (event.data.type === 'open' || event.data.action === 'open') {
+          event.preventDefault();
+          console.log('Blocked popup attempt');
+        }
+      }
+    });
+
+    // Override window.open to prevent new tabs
+    const originalWindowOpen = window.open;
+    window.open = function() {
+      console.log('Blocked window.open attempt');
+      return null;
+    };
+
+    // Search mode detection and activation
+    let searchModeActive = false;
+    const navHeader = document.getElementById('navHeader');
+
+    function activateSearchMode() {
+      if (!searchModeActive) {
+        searchModeActive = true;
+        navHeader.classList.add('search-mode');
+        console.log('Search mode activated - Navigation expanded');
+      }
+    }
+
+    function deactivateSearchMode() {
+      if (searchModeActive) {
+        searchModeActive = false;
+        navHeader.classList.remove('search-mode');
+        console.log('Search mode deactivated');
+      }
+    }
+
+    // Try to inject CSS into iframe (will only work if same-origin or permissive CORS)
+    document.getElementById('animeFrame').addEventListener('load', function() {
+      try {
+        const iframe = this;
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        
+        // Add CSS to hide AnimeSalt logos - more aggressive targeting
+        const style = doc.createElement('style');
+        style.textContent = `
+          /* Hide all AnimeSalt branding - extremely aggressive targeting */
+          img {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: hidden !important;
+          }
+          
+          /* Show only specific anime-related images */
+          img[src*="anime"],
+          img[src*="poster"],
+          img[src*="thumb"],
+          img[src*="cover"],
+          img[alt*="episode"],
+          img[alt*="anime"],
+          img[alt*="poster"],
+          img[alt*="cover"] {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            height: auto !important;
+            width: auto !important;
+            overflow: visible !important;
+          }
+          
+          /* Hide all text that might contain branding */
+          * {
+            font-family: inherit !important;
+          }
+          
+          /* Hide specific logo containers */
+          .logo,
+          .site-logo,
+          .header-logo,
+          .branding,
+          .watermark,
+          [class*="logo"],
+          [class*="brand"],
+          [class*="anime-salt"],
+          [class*="animesalt"],
+          [class*="AnimeSalt"],
+          [id*="logo"],
+          [id*="AnimeSalt"],
+          [id*="anime-salt"],
+          footer,
+          .footer,
+          #footer {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: hidden !important;
+            position: absolute !important;
+            left: -9999px !important;
+            top: -9999px !important;
+          }
+
+          /* Hide background images that might be logos */
+          body {
+            background-image: none !important;
+          }
+          
+          header {
+            background-image: none !important;
+          }
+          
+          /* Hide any element with AnimeSalt in any attribute */
+          *[alt*="AnimeSalt"],
+          *[alt*="anime salt"],
+          *[alt*="animesalt"],
+          *[title*="AnimeSalt"],
+          *[title*="anime salt"],
+          *[title*="animesalt"],
+          *[src*="AnimeSalt"],
+          *[src*="anime salt"],
+          *[src*="animesalt"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: hidden !important;
+          }
+
+          /* Hide ad popups */
+          .popup,
+          .modal,
+          [class*="ad"],
+          [class*="popup"],
+          [class*="modal"] {
+            display: none !important;
+          }
+          
+          /* Hide bottom elements that might contain logos */
+          .bottom,
+          .footer-bottom,
+          [class*="bottom"] {
+            display: none !important;
+          }
+        `;
+        doc.head.appendChild(style);
+        
+        // Override window.open inside iframe
+        try {
+          const iframeWindow = iframe.contentWindow;
+          iframeWindow.open = function() {
+            console.log('Blocked iframe window.open');
+            return null;
+          };
+          
+          // Monitor for search navigation in iframe
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              if (mutation.addedNodes.length > 0) {
+                // Check if search bar or search-related elements appeared
+                const searchElements = doc.querySelectorAll('input[type="search"], input[type="text"], .search, [class*="search"], [id*="search"]');
+                if (searchElements.length > 0) {
+                  activateSearchMode();
+                }
+              }
+            });
+          });
+          
+          observer.observe(doc.body, { childList: true, subtree: true });
+          
+          // Also check URL changes
+          let lastUrl = iframe.contentWindow.location.href;
+          const checkUrlChange = setInterval(() => {
+            try {
+              const currentUrl = iframe.contentWindow.location.href;
+              if (currentUrl !== lastUrl) {
+                lastUrl = currentUrl;
+                // Check if URL contains search-related terms
+                if (currentUrl.includes('search') || currentUrl.includes('query') || currentUrl.includes('s=')) {
+                  activateSearchMode();
+                } else {
+                  deactivateSearchMode();
+                }
+              }
+            } catch(e) {
+              // Cross-origin, can't check URL
+            }
+          }, 500);
+          
+        } catch(e) {
+          console.log('Cannot override iframe window.open (cross-origin)');
+        }
+        
+        console.log('Successfully injected CSS into iframe');
+      } catch (error) {
+        console.log('Cannot inject into iframe (cross-origin restriction)');
+        console.log('Using overlay method instead');
+      }
+    });
+
+    
+    // Keyboard shortcut to manually toggle search mode (for testing)
+    document.addEventListener('keydown', function(e) {
+      // Press Ctrl+Shift+S to toggle search mode
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        if (searchModeActive) {
+          deactivateSearchMode();
+        } else {
+          activateSearchMode();
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "PS MOVIZ hub",
+  "short_name": "PS MOVIZ",
+  "description": "Download the latest movies with direct links and no ads.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#dc2626",
+  "icons": [
+    {
+      "src": "https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/render/image/public/project-uploads/edc22665-6f69-41bf-966e-691d920b92da/WhatsApp_Image_2026-01-27_at_10.41.17_PM-removebg-preview-1769562285410.png?width=192&height=192&resize=contain",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/render/image/public/project-uploads/edc22665-6f69-41bf-966e-691d920b92da/WhatsApp_Image_2026-01-27_at_10.41.17_PM-removebg-preview-1769562285410.png?width=512&height=512&resize=contain",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

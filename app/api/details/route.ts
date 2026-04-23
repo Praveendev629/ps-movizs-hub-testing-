@@ -52,6 +52,71 @@ async function resolveMoviesdaChain(
     : `${siteBase}${pageUrl}`;
   const html1 = await fetchHtml(fullUrl, siteBase);
 
+  // Check if this is already a movies.downloadpage.xyz URL (step 2)
+  if (fullUrl.includes('movies.downloadpage.xyz')) {
+    console.log('Direct movies.downloadpage.xyz URL detected, skipping to step 2');
+    // This is already step 2, so we can process it directly
+    const step2 = extractHrefLinks(
+      html1,
+      /href="(https?:\/\/dubmv\.top\/download\/file\/\d+)"[^>]*>([^<]+)/gi
+    );
+    
+    let html3 = "";
+    if (step2.length > 0) {
+      html3 = await fetchHtml(step2[0].url, fullUrl);
+    } else {
+      html3 = html1;
+    }
+    
+    // Extract CDN download links
+    const dlLinks = extractHrefLinks(
+      html3,
+      /href="(https?:\/\/s\d+\.cdnserver\d+\.xyz[^"]+)"[^>]*>([^<]*(?:Download|Server)[^<]*)/gi
+    );
+
+    // Extract watch links - look for onestream.today links
+    let watchLinks = extractHrefLinks(
+      html3,
+      /href="(https?:\/\/play\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    );
+
+    // Also try alternative pattern for onestream
+    if (watchLinks.length === 0) {
+      watchLinks = extractHrefLinks(
+        html3,
+        /href="(https?:\/\/stream\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+      );
+    }
+
+    // General pattern for any onestream.today link
+    if (watchLinks.length === 0) {
+      watchLinks = extractHrefLinks(
+        html3,
+        /href="(https?:\/\/[^"]*onestream\.today\/[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+      );
+    }
+
+    console.log('Direct movies.downloadpage.xyz - Found watch links:', watchLinks.length);
+    watchLinks.forEach((link, i) => {
+      console.log(`  ${i + 1}. ${link.name}: ${link.url}`);
+    });
+
+    // Resolve onestream links
+    const resolvedLinks = [];
+    for (const link of watchLinks) {
+      if (link.url.includes('onestream.today')) {
+        resolvedLinks.push({
+          name: link.name,
+          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
+        });
+      } else {
+        resolvedLinks.push(link);
+      }
+    }
+
+    return { serverLinks: dlLinks, watchLinks: resolvedLinks };
+  }
+
   // Step 1: find download.moviespage.xyz link
   const step1 = extractHrefLinks(
     html1,
@@ -82,11 +147,27 @@ async function resolveMoviesdaChain(
     /href="(https?:\/\/cdn\.[^"]+|https?:\/\/s\d+\.[^"]+\.(?:mp4|mkv)[^"]*)"[^>]*>([^<]+)/gi
   );
 
-  // Extract watch links - improved patterns to catch more streaming links
+  // Extract watch links - prioritize onestream.today links
   let watchLinks = extractHrefLinks(
     html3,
-    /href="(https?:\/\/(?:play|stream|watch|online|video)[^"]+|https?:\/\/[^"]*(?:stream|watch|play|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    /href="(https?:\/\/play\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
   );
+
+  // Fallback to other onestream patterns
+  if (watchLinks.length === 0) {
+    watchLinks = extractHrefLinks(
+      html3,
+      /href="(https?:\/\/(?:play|stream)\.onestream\.today\/[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    );
+  }
+
+  // General streaming patterns
+  if (watchLinks.length === 0) {
+    watchLinks = extractHrefLinks(
+      html3,
+      /href="(https?:\/\/(?:play|stream|watch|online|video)[^"]+|https?:\/\/[^"]*(?:stream|watch|play|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    );
+  }
 
   console.log('Moviesda - Initial watch links:', watchLinks.length);
   watchLinks.forEach((link, i) => {
@@ -99,11 +180,20 @@ async function resolveMoviesdaChain(
     /href="(https?:\/\/[^"]*\.(?:mp4|m3u8|webm|mkv)[^"]*)"[^>]*>/gi
   );
 
-  // Specific pattern for moviesda streaming sites - handle actual flow pattern
+  // Specific pattern for moviesda streaming sites - prioritize play.onestream.today
   const moviesdaStreamLinks2 = extractHrefLinks(
     html3,
-    /href="(https?:\/\/(?:download\.moviespage\.xyz\/download\/file\/\d+|movies\.downloadpage\.xyz\/download\/file\/\d+|stream\.onestream\.today\/stream\/page\/\d+))"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    /href="(https?:\/\/play\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
   );
+
+  // Also try other onestream patterns
+  if (moviesdaStreamLinks2.length === 0) {
+    const additionalLinks = extractHrefLinks(
+      html3,
+      /href="(https?:\/\/(?:download\.moviespage\.xyz\/download\/file\/\d+|movies\.downloadpage\.xyz\/download\/file\/\d+|stream\.onestream\.today\/stream\/page\/\d+))"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    );
+    moviesdaStreamLinks2.push(...additionalLinks);
+  }
 
   console.log('Moviesda - Stream links found:', moviesdaStreamLinks2.length);
   moviesdaStreamLinks2.forEach((link, i) => {
@@ -113,7 +203,7 @@ async function resolveMoviesdaChain(
   // Also try to catch any onestream variations from moviesda
   const onestreamVariations = extractHrefLinks(
     html3,
-    /href="(https?:\/\/(?:download\.moviespage\.xyz\/download\/file\/\d+|movies\.downloadpage\.xyz\/download\/file\/\d+))"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    /href="(https?:\/\/(?:download\.moviespage\.xyz\/download\/file\/\d+|movies\.downloadpage\.xyz\/download\/file\/\d+|play\.onestream\.today\/stream\/page\/\d+|stream\.onestream\.today\/stream\/page\/\d+))"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
   );
 
   console.log('Moviesda - Onestream variations found:', onestreamVariations.length);
@@ -193,8 +283,40 @@ async function resolveMoviesdaChain(
     /href="(https?:\/\/(?:[^"]*\.?stream[^"]*|[^"]*\.?play[^"]*|[^"]*\.?watch[^"]*|dub[^"]*|video[^"]*)[^"]+)"[^>]*>/gi
   );
 
+  // General pattern for any onestream.today URLs (catch-all)
+  const generalOnestreamLinks = extractHrefLinks(
+    html3,
+    /href="(https?:\/\/[^"]*onestream\.today\/[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+  );
+
+  // If still no links, try without text requirement
+  if (generalOnestreamLinks.length === 0) {
+    const fallbackLinks = extractHrefLinks(
+      html3,
+      /href="(https?:\/\/[^"]*onestream\.today\/[^"]+)"[^>]*>/gi
+    );
+    generalOnestreamLinks.push(...fallbackLinks);
+  }
+
+  // Resolve general onestream links
+  const resolvedGeneralLinks = [];
+  for (const link of generalOnestreamLinks) {
+    try {
+      if (link.url.includes('onestream.today')) {
+        resolvedGeneralLinks.push({
+          name: link.name,
+          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
+        });
+      } else {
+        resolvedGeneralLinks.push(link);
+      }
+    } catch (error) {
+      console.error('Error resolving general onestream link:', error);
+    }
+  }
+
   // Merge all watch links, removing duplicates
-  const allWatchLinks = [...watchLinks, ...resolvedMoviesdaLinks, ...onestreamVariations, ...directVideoLinks, ...streamingLinks];
+  const allWatchLinks = [...watchLinks, ...resolvedMoviesdaLinks, ...onestreamVariations, ...directVideoLinks, ...streamingLinks, ...resolvedGeneralLinks];
   watchLinks = allWatchLinks.filter((link, index, self) => 
     index === self.findIndex((l) => l.url === link.url)
   );
@@ -479,15 +601,19 @@ export async function GET(req: NextRequest) {
   const site = req.nextUrl.searchParams.get("site") || "moviesda";
   const siteBase = SITES[site] || SITES.moviesda;
 
+  console.log('Details API called with:', { urlParam, site, siteBase });
+
   if (!urlParam)
     return NextResponse.json({ items: [], serverLinks: [], watchLinks: [] });
 
   try {
     // Detect if this is a download trigger page
     const isMoviesdaDownload =
-      site === "moviesda" && /^\/download\//.test(urlParam);
+      site === "moviesda" && (/^\/download\/(page\/)?/.test(urlParam) || urlParam.includes('movies.downloadpage.xyz'));
     const isIsaidubDownload =
       site === "isaidub" && /^\/download\/page\//.test(urlParam);
+
+    console.log('URL detection:', { isMoviesdaDownload, isIsaidubDownload });
 
     if (isMoviesdaDownload) {
       const result = await resolveMoviesdaChain(urlParam, siteBase);

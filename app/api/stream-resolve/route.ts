@@ -1,10 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Simple in-memory cache for stream URLs (reset on server restart)
+const streamCache = new Map<string, { url: string; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
   try {
     console.log('Resolving stream page:', streamPageUrl);
     
-    // First try a simple approach - check if this is a direct video URL or redirect
+    // Check cache first
+    const cached = streamCache.get(streamPageUrl);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log('Returning cached stream URL:', cached.url);
+      return cached.url;
+    }
+    
+    // Fast timeout for HEAD request (3 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
     try {
       const headResponse = await fetch(streamPageUrl, {
         method: 'HEAD',
@@ -12,7 +26,8 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Referer": "https://dubmv.top/",
         },
-        redirect: 'follow'
+        redirect: 'follow',
+        signal: controller.signal
       });
         
       const contentType = headResponse.headers.get('content-type') || '';
@@ -24,13 +39,22 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
       // If we got a video content type or the final URL is a video file, return it
       if (contentType.includes('video/') || finalUrl.includes('.mp4') || finalUrl.includes('.m3u8') || finalUrl.includes('.webm')) {
         console.log('Found direct video URL via HEAD:', finalUrl);
+        clearTimeout(timeoutId);
+        
+        // Cache the result
+        streamCache.set(streamPageUrl, { url: finalUrl, timestamp: Date.now() });
+        
         return finalUrl;
       }
     } catch (headError) {
-      console.log('HEAD request failed, trying full page parse');
+      clearTimeout(timeoutId);
+      console.log('HEAD request failed or timed out, trying full page parse');
     }
     
-    // Fetch the stream page with better headers
+    // Fetch the stream page with timeout (8 seconds)
+    const pageController = new AbortController();
+    const pageTimeoutId = setTimeout(() => pageController.abort(), 8000);
+    
     const response = await fetch(streamPageUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -41,7 +65,10 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
       },
+      signal: pageController.signal
     });
+
+    clearTimeout(pageTimeoutId);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch stream page: ${response.status}`);
@@ -77,6 +104,10 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
         const url = match[1];
         if (url && (url.includes('.mp4') || url.includes('.m3u8') || url.includes('.webm') || url.includes('.mkv') || url.includes('.avi') || url.includes('.mov'))) {
           console.log('Found video URL:', url);
+          
+          // Cache the result
+          streamCache.set(streamPageUrl, { url, timestamp: Date.now() });
+          
           return url;
         }
       }
@@ -94,6 +125,10 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
         const url = match[1];
         if (url && !url.includes('ads') && !url.includes('popup')) {
           console.log('Found iframe URL:', url);
+          
+          // Cache the result
+          streamCache.set(streamPageUrl, { url, timestamp: Date.now() });
+          
           return url;
         }
       }
@@ -125,6 +160,10 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
         const url = match[2] || match[1]; // Handle both patterns
         if (url && (url.includes('.mp4') || url.includes('.m3u8') || url.includes('.webm') || url.includes('.mkv') || url.includes('.avi') || url.includes('.mov'))) {
           console.log('Found JS video URL:', url);
+          
+          // Cache the result
+          streamCache.set(streamPageUrl, { url, timestamp: Date.now() });
+          
           return url;
         }
       }
@@ -157,6 +196,10 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
               const url = scriptMatch[1];
               if (url) {
                 console.log('Found video URL in script:', url);
+                
+                // Cache the result
+                streamCache.set(streamPageUrl, { url, timestamp: Date.now() });
+                
                 return url;
               }
             }
@@ -169,6 +212,10 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
     const metaRefresh = html.match(/<meta[^>]*http-equiv=["']refresh["'][^>]*content=["'][^;]*;url=([^"']+)["']/i);
     if (metaRefresh && metaRefresh[1]) {
       console.log('Found meta refresh to:', metaRefresh[1]);
+      
+      // Cache the result
+      streamCache.set(streamPageUrl, { url: metaRefresh[1], timestamp: Date.now() });
+      
       return metaRefresh[1];
     }
     
@@ -176,6 +223,10 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
     
     // As a last resort, return the original URL - the video player or proxy might handle it
     console.log('Returning original URL as fallback:', streamPageUrl);
+    
+    // Cache the fallback result
+    streamCache.set(streamPageUrl, { url: streamPageUrl, timestamp: Date.now() });
+    
     return streamPageUrl;
 
   } catch (error) {

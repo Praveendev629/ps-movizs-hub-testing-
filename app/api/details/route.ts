@@ -38,9 +38,26 @@ function extractHrefLinks(
 }
 
 function dedupeLinks(links: { name: string; url: string }[]) {
-  return links.filter((link, index, self) =>
-    index === self.findIndex((item) => item.url === link.url)
-  );
+  const seen = new Map<string, { name: string; url: string }>();
+  const deduped: { name: string; url: string }[] = [];
+  
+  for (const link of links) {
+    // Normalize URL for comparison (remove trailing slashes, lowercase)
+    const normalizedUrl = link.url.replace(/\/$/, '').toLowerCase();
+    
+    if (!seen.has(normalizedUrl)) {
+      seen.set(normalizedUrl, link);
+      deduped.push(link);
+    } else {
+      // Keep the more descriptive name if available
+      const existing = seen.get(normalizedUrl)!;
+      if (link.name.length > existing.name.length && !link.name.includes('Direct stream')) {
+        existing.name = link.name;
+      }
+    }
+  }
+  
+  return deduped;
 }
 
 /**
@@ -335,8 +352,19 @@ async function resolveMoviesdaChain(
     }
   }
 
+  // Debug logging for each source
+  console.log('Moviesda - Link sources:');
+  console.log(`  watchLinks: ${watchLinks.length}`);
+  console.log(`  watchSectionLinks: ${watchSectionLinks.length}`);
+  console.log(`  playOnestreamLinks: ${playOnestreamLinks.length}`);
+  console.log(`  resolvedMoviesdaLinks: ${resolvedMoviesdaLinks.length}`);
+  console.log(`  onestreamVariations: ${onestreamVariations.length}`);
+  console.log(`  directVideoLinks: ${directVideoLinks.length}`);
+  console.log(`  streamingLinks: ${streamingLinks.length}`);
+  console.log(`  resolvedGeneralLinks: ${resolvedGeneralLinks.length}`);
+
   // Merge all watch links, removing duplicates
-const allWatchLinks = [
+  const allWatchLinks = [
     ...watchLinks,
     ...watchSectionLinks,
     ...playOnestreamLinks,
@@ -346,10 +374,12 @@ const allWatchLinks = [
     ...streamingLinks,
     ...resolvedGeneralLinks,
   ];
+  
+  console.log(`Moviesda - Total links before dedup: ${allWatchLinks.length}`);
   watchLinks = dedupeLinks(allWatchLinks);
 
   // Debug logging for watch links
-  console.log('Moviesda - Found watch links:', watchLinks.length);
+  console.log('Moviesda - Found watch links after dedup:', watchLinks.length);
   watchLinks.forEach((link, i) => {
     console.log(`  ${i + 1}. ${link.name}: ${link.url}`);
   });

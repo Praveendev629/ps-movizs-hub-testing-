@@ -60,6 +60,50 @@ function dedupeLinks(links: { name: string; url: string }[]) {
   return deduped;
 }
 
+function prioritizeAndLimitLinks(links: { name: string; url: string }[], limit: number = 2) {
+  // Priority scoring system
+  const scoredLinks = links.map(link => {
+    let score = 0;
+    const name = link.name.toLowerCase();
+    const url = link.url.toLowerCase();
+    
+    // Prioritize onestream.today links
+    if (url.includes('onestream.today')) {
+      score += 100;
+      if (url.includes('play.onestream.today')) {
+        score += 50; // Extra priority for play.onestream.today
+      }
+    }
+    
+    // Prioritize links with "Watch Online" in name
+    if (name.includes('watch online')) {
+      score += 30;
+    }
+    
+    // Prioritize "Server 1" over higher numbers
+    if (name.includes('server 1')) {
+      score += 20;
+    }
+    
+    // Penalize "Direct stream" links
+    if (name.includes('direct stream')) {
+      score -= 10;
+    }
+    
+    // Prioritize links with better descriptions
+    if (link.name.length > 20) {
+      score += 5;
+    }
+    
+    return { ...link, score };
+  });
+  
+  // Sort by score (descending) and take top links
+  scoredLinks.sort((a, b) => b.score - a.score);
+  
+  return scoredLinks.slice(0, limit).map(({ score, ...link }) => link);
+}
+
 /**
  * Moviesda download chain:
  * /download/slug/ → download.moviespage.xyz/download/file/ID → movies.downloadpage.xyz/download/page/ID → CDN links
@@ -378,8 +422,11 @@ async function resolveMoviesdaChain(
   console.log(`Moviesda - Total links before dedup: ${allWatchLinks.length}`);
   watchLinks = dedupeLinks(allWatchLinks);
 
+  // Prioritize and limit to only 2 best watch online links
+  watchLinks = prioritizeAndLimitLinks(watchLinks, 2);
+
   // Debug logging for watch links
-  console.log('Moviesda - Found watch links after dedup:', watchLinks.length);
+  console.log('Moviesda - Final watch links (limited to 2):', watchLinks.length);
   watchLinks.forEach((link, i) => {
     console.log(`  ${i + 1}. ${link.name}: ${link.url}`);
   });
@@ -529,8 +576,11 @@ async function resolveIsaidubChain(
   ];
   watchLinks = dedupeLinks(allWatchLinks);
 
+  // Prioritize and limit to only 2 best watch online links
+  watchLinks = prioritizeAndLimitLinks(watchLinks, 2);
+
   // Debug logging for watch links
-  console.log('Isaidub - Found watch links:', watchLinks.length);
+  console.log('Isaidub - Final watch links (limited to 2):', watchLinks.length);
   watchLinks.forEach((link, i) => {
     console.log(`  ${i + 1}. ${link.name}: ${link.url}`);
   });

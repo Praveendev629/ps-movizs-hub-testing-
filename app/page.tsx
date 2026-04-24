@@ -626,6 +626,28 @@ export default function HomePage() {
                 <Loader2 className="w-10 h-10 text-red-600 animate-spin" />
                 <p className="text-zinc-500 font-medium">Powering up the p.s movizs engine...</p>
               </div>
+            ) : isLetterPageWithMovies ? (
+              /* Movie grid for letter pages */
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                <AnimatePresence mode="popLayout">
+                  {filteredMovies.map((movie, i) => (
+                    <motion.div key={movie.url} layout
+                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: 0.003 * i }}
+                      onClick={() => openDetails(movie.title, movie.url)}
+                      className="group cursor-pointer">
+                      <div className="relative aspect-[2/3] bg-white/5 rounded-2xl border border-white/5 overflow-hidden group-hover:border-red-600/50 transition-all shadow-xl shadow-black">
+                        <MoviePoster title={movie.title} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <div className="absolute bottom-0 left-0 right-0 p-3">
+                            <h3 className="text-white font-bold text-xs line-clamp-2 drop-shadow-lg">{movie.title}</h3>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
             ) : isAlphaList ? (
               /* A-Z letter buttons */
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">

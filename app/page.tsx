@@ -932,7 +932,7 @@ export default function HomePage() {
                           <div className="flex items-center gap-2 mb-4">
                             <Download className="w-4 h-4 text-zinc-500" />
                             <span className="text-xs font-black uppercase tracking-widest text-zinc-500">
-                              {details.items[0].url.includes("/download/") ? "Download Files" : "Select Quality / Version"}
+                              {details.items[0].url.includes("/download/") ? "Download Files" : "Select Quality for Watch Online"}
                             </span>
                           </div>
                           {details.items
@@ -940,7 +940,13 @@ export default function HomePage() {
                             .map((item, i) => (
                               <button key={i} onClick={() => drillDown(item)}
                                 className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
-                                <span className="text-sm font-medium text-zinc-300 group-hover:text-white text-left">{item.name}</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-medium text-zinc-300 group-hover:text-white text-left">{item.name}</span>
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                    <span className="text-xs text-green-500">Streaming Available</span>
+                                  </div>
+                                </div>
                                 <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-red-600 transition-transform group-hover:translate-x-1 shrink-0" />
                               </button>
                             ))}

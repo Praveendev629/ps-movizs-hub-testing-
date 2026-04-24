@@ -403,6 +403,7 @@ export default function HomePage() {
     try {
       const res = await fetch(`/api/category?url=${encodeURIComponent(cat.url)}&site=${site}`);
       const data = await res.json();
+      console.log(`Frontend: Loaded ${data.length} movies for ${cat.name}`);
       setMovies(data);
     } catch { setMovies([]); }
     finally { setMoviesLoading(false); }
@@ -460,7 +461,11 @@ export default function HomePage() {
     [categories, search]
   );
   const filteredMovies = useMemo(
-    () => movies.filter((m) => m.title.toLowerCase().includes(search.toLowerCase())),
+    () => {
+      const filtered = movies.filter((m) => m.title.toLowerCase().includes(search.toLowerCase()));
+      console.log(`Frontend: ${filtered.length} filtered movies from ${movies.length} total movies`);
+      return filtered;
+    },
     [movies, search]
   );
 

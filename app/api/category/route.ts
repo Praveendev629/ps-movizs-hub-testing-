@@ -435,6 +435,8 @@ export async function GET(req: NextRequest) {
   const site = req.nextUrl.searchParams.get("site") || "moviesda";
   const siteBase = SITES[site] || SITES.moviesda;
 
+  console.log(`Category API called: url=${url}, site=${site}`);
+
   if (!url) return NextResponse.json([]);
 
   try {

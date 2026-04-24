@@ -516,11 +516,20 @@ export async function GET(req: NextRequest) {
     const lastPage = getLastPage(firstHtml, site);
     const isMoviesdaLetterPage = site === "moviesda" && isMoviesdaLetterPageUrl(url);
     const isAnimesaltPage = site === "animesalt";
+    const isHeroCollection = url.includes("actor-") && url.includes("-movies-collection");
     const pageMode = site === "moviesda"
       ? (usesMoviesdaPathPagination(firstHtml) ? "path" : "query")
       : "query";
+    
+    // For hero collections, always fetch all pages to show all movies
     // For isaidub, allow up to 50 pages; for moviesda, cap at 30; for animesalt, cap at 20
-    const maxPages = site === "isaidub" ? Math.min(lastPage, 50) : site === "animesalt" ? Math.min(lastPage, 20) : Math.min(lastPage, 30);
+    let maxPages;
+    if (isHeroCollection) {
+      maxPages = lastPage; // Fetch all pages for hero collections
+      console.log(`Hero collection detected: fetching all ${maxPages} pages`);
+    } else {
+      maxPages = site === "isaidub" ? Math.min(lastPage, 50) : site === "animesalt" ? Math.min(lastPage, 20) : Math.min(lastPage, 30);
+    }
     console.log(`URL: ${fullUrl}`);
     console.log(`Last page detected: ${lastPage}, page mode: ${pageMode}`);
 

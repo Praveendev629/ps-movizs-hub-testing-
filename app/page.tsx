@@ -616,8 +616,8 @@ export default function HomePage() {
                 <Loader2 className="w-10 h-10 text-red-600 animate-spin" />
                 <p className="text-zinc-500 font-medium">Powering up the p.s movizs engine...</p>
               </div>
-            ) : isLetterPage ? (
-              /* Movie grid for letter pages */
+            ) : selectedCategory?.url?.includes("/tamil-movies/") ? (
+              /* FORCE movie grid for all tamil-movies URLs */
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                 <AnimatePresence mode="popLayout">
                   {filteredMovies.map((movie, i) => (

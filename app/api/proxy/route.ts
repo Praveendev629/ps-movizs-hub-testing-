@@ -42,8 +42,28 @@ export async function GET(req: NextRequest) {
       throw new Error(`Failed to fetch video: ${response.status}`);
     }
 
-    // Get content type from response or default to video/mp4
-    const contentType = response.headers.get("content-type") || "video/mp4";
+    // Get content type from response or detect from URL
+    let contentType = response.headers.get("content-type");
+    
+    // If content type is not provided or is generic, detect from URL
+    if (!contentType || contentType.includes("application/octet-stream") || contentType.includes("application/force-download")) {
+      const urlLower = videoUrl.toLowerCase();
+      if (urlLower.includes('.m3u8')) {
+        contentType = "application/vnd.apple.mpegurl";
+      } else if (urlLower.includes('.mp4')) {
+        contentType = "video/mp4";
+      } else if (urlLower.includes('.webm')) {
+        contentType = "video/webm";
+      } else if (urlLower.includes('.mkv')) {
+        contentType = "video/x-matroska";
+      } else if (urlLower.includes('.avi')) {
+        contentType = "video/x-msvideo";
+      } else if (urlLower.includes('.mov')) {
+        contentType = "video/quicktime";
+      } else {
+        contentType = "video/mp4"; // Default fallback
+      }
+    }
     
     // Get content length if available
     const contentLength = response.headers.get("content-length");
@@ -63,13 +83,48 @@ export async function GET(req: NextRequest) {
 
     // Handle range requests for video streaming
     const range = req.headers.get("range");
-    if (range && response.headers.get("accept-ranges") === "bytes") {
+    if (range) {
+      console.log('Range request:', range);
+      
+      // If the original response supports range requests, proxy them
+      if (response.headers.get("accept-ranges") === "bytes") {
+        responseHeaders.set("Accept-Ranges", "bytes");
+        responseHeaders.set("Content-Range", response.headers.get("content-range") || `bytes 0-${(contentLength ? parseInt(contentLength) - 1 : '*')}/${contentLength || '*'}`);
+        
+        // Forward the range request to the original server
+        const rangeResponse = await fetch(videoUrl, {
+          headers: {
+            ...Object.fromEntries(headers.entries()),
+            "Range": range
+          },
+          redirect: 'follow'
+        });
+        
+        if (rangeResponse.ok) {
+          const finalHeaders: Record<string, string> = {
+            ...Object.fromEntries(responseHeaders.entries()),
+            "Accept-Ranges": "bytes"
+          };
+          
+          const contentRange = rangeResponse.headers.get("content-range") || responseHeaders.get("Content-Range");
+          if (contentRange) {
+            finalHeaders["Content-Range"] = contentRange;
+          }
+          
+          const finalContentLength = rangeResponse.headers.get("content-length") || contentLength;
+          if (finalContentLength) {
+            finalHeaders["Content-Length"] = finalContentLength;
+          }
+          
+          return new NextResponse(rangeResponse.body, {
+            status: rangeResponse.status === 206 ? 206 : 200,
+            headers: finalHeaders,
+          });
+        }
+      }
+      
+      // If we can't handle range requests, at least set the header
       responseHeaders.set("Accept-Ranges", "bytes");
-      responseHeaders.set("Content-Range", response.headers.get("content-range") || `bytes 0-${(contentLength ? parseInt(contentLength) - 1 : '*')}/${contentLength || '*'}`);
-      return new NextResponse(response.body, {
-        status: 206, // Partial Content
-        headers: responseHeaders,
-      });
     }
 
     return new NextResponse(response.body, {

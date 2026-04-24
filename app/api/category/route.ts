@@ -245,16 +245,18 @@ function extractMoviesFromPage(
   
   // If this is a moviesda letter page, parse movie item links directly before fallback
   if (site === "moviesda" && /\/tamil-movies\/[a-zA-Z](?:\/\?page=\d+)?$/.test(baseUrl)) {
-    // Multiple patterns for moviesda19.com letter pages
+    // Updated patterns to match actual moviesda19.com format
     const moviePatterns = [
-      // Pattern for movie links with year and format
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-movie(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Pattern for movie links without year
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-tamil-movie(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Pattern for web series
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-web-series(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Generic pattern for any movie link
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-(?:\d{4}-)?tamil-(?:movie|web-series)(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi
+      // Pattern for movie links with year: /movie-name-year-tamil-movie/
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-movie(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
+      // Pattern for movie links without year: /movie-name-tamil-movie/
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-tamil-movie(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
+      // Pattern for web series: /movie-name-year-tamil-web-series/
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-web-series(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
+      // Pattern for movies with -1 suffix: /movie-name-year-tamil-movie-1/
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-movie-\d+(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
+      // Generic pattern for any tamil movie/web-series
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-(?:\d{4}-)?tamil-(?:movie|web-series)(?:-\d+)?(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi
     ];
     
     for (const pattern of moviePatterns) {
@@ -270,6 +272,28 @@ function extractMoviesFromPage(
         if (!movies.find(m => m.url === normalizedHref)) {
           movies.push({ title, url: normalizedHref });
         }
+      }
+    }
+  }
+
+  // Add fallback for moviesda letter pages - catch any link with movie-like text
+  if (site === "moviesda" && /\/tamil-movies\/[a-zA-Z](?:\/\?page=\d+)?$/.test(baseUrl) && movies.length === 0) {
+    const fallbackPattern = /<a[^>]+href="([^"]+)"[^>]*>([^<]*(?:\(\d{4}\))[^<]*)<\/a>/gi;
+    let m3: RegExpExecArray | null;
+    while ((m3 = fallbackPattern.exec(html)) !== null) {
+      const href = m3[1].trim();
+      const title = m3[2].replace(/<[^>]*>/g, "").trim();
+      const lower = title.toLowerCase();
+      
+      // Check if title looks like a movie (has year and reasonable length)
+      if (!title || title.length < 3) continue;
+      if (!/\(\d{4}\)/.test(title)) continue; // Must have year
+      if (lower.includes("collection") || lower.includes("download") || lower.includes("genres") || lower.includes("dubbed")) continue;
+      if (!href.includes("tamil-movie") && !href.includes("tamil-web-series")) continue;
+      
+      const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
+      if (!movies.find(m => m.url === normalizedHref)) {
+        movies.push({ title, url: normalizedHref });
       }
     }
   }

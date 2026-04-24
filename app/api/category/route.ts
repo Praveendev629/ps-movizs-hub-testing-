@@ -463,14 +463,22 @@ export async function GET(req: NextRequest) {
     // Special handling for Tamil Movies Collection - extract hero collections directly
     if (url.includes("tamil-movies-collection")) {
       console.log("Direct extraction for Tamil Movies Collection");
+      console.log(`HTML snippet: ${firstHtml.substring(0, 500)}`);
+      
       const heroPatterns = [
+        // Try markdown patterns first
         /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
         /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi,
         /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
         /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi,
         // Handle both singular and plural
         /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi,
-        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi
+        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi,
+        // Try HTML patterns
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
+        // Generic patterns
+        /\[([^\]]*Collection)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi
       ];
       
       const heroCollections: { title: string; url: string }[] = [];

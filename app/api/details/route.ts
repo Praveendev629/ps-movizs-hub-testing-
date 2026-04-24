@@ -912,15 +912,6 @@ export async function GET(req: NextRequest) {
         (site === "isaidub" && /^\/download\/page\//.test(i.url))
     );
 
-    console.log(`Download items detection: found ${downloadItems.length} download items from ${items.length} total items`);
-    console.log('Download items:', downloadItems);
-    console.log('Site:', site);
-    console.log('URL pattern test for each item:');
-    items.forEach((item, index) => {
-      const matches = /^\/download\//.test(item.url);
-      console.log(`  Item ${index}: ${item.name} -> ${item.url} -> matches: ${matches}`);
-    });
-
     if (downloadItems.length > 0) {
       const allServerLinks: { name: string; url: string }[] = [];
       const allWatchLinks: { name: string; url: string }[] = [];

@@ -459,6 +459,40 @@ export async function GET(req: NextRequest) {
     // Extract movies from first page
     let allMovies = extractMoviesFromPage(firstHtml, fullUrl, site);
     console.log(`First page: ${allMovies.length} movies`);
+    
+    // Special handling for Tamil Movies Collection - extract hero collections directly
+    if (url.includes("tamil-movies-collection")) {
+      console.log("Direct extraction for Tamil Movies Collection");
+      const heroPatterns = [
+        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
+        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi,
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi
+      ];
+      
+      const heroCollections: { title: string; url: string }[] = [];
+      for (const pattern of heroPatterns) {
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(firstHtml)) !== null) {
+          const title = match[1].trim();
+          const href = match[2].trim();
+          
+          console.log(`Direct found hero: ${title} -> ${href}`);
+          
+          if (!title || title.length < 3) continue;
+          
+          const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
+          if (!heroCollections.find(h => h.url === normalizedHref)) {
+            heroCollections.push({ title, url: normalizedHref });
+          }
+        }
+      }
+      
+      if (heroCollections.length > 0) {
+        console.log(`Found ${heroCollections.length} hero collections directly`);
+        allMovies = heroCollections;
+      }
+    }
 
     // Get pagination info
     const lastPage = getLastPage(firstHtml, site);

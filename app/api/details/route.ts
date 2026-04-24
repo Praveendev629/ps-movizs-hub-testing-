@@ -967,9 +967,23 @@ export async function GET(req: NextRequest) {
           watchLinks: allWatchLinks,
         });
       }
+      
+      // Return items even if no links were found (for quality pages)
+      return NextResponse.json({
+        items: items.filter(
+          (i) =>
+            !(site === "moviesda" && /^\/download\//.test(i.url)) &&
+            !(site === "isaidub" && /^\/download\/page\//.test(i.url))
+        ),
+        serverLinks: allServerLinks,
+        watchLinks: allWatchLinks,
+      });
     }
 
-    return NextResponse.json({ items, serverLinks: [], watchLinks: [] });
+    // Only return empty results if no download items were found and processed
+    if (downloadItems.length === 0) {
+      return NextResponse.json({ items, serverLinks: [], watchLinks: [] });
+    }
   } catch (err) {
     console.error("Details error:", err);
     return NextResponse.json({ items: [], serverLinks: [], watchLinks: [] });

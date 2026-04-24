@@ -912,6 +912,9 @@ export async function GET(req: NextRequest) {
         (site === "isaidub" && /^\/download\/page\//.test(i.url))
     );
 
+    console.log(`Download items detection: found ${downloadItems.length} download items from ${items.length} total items`);
+    console.log('Download items:', downloadItems);
+
     if (downloadItems.length > 0) {
       const allServerLinks: { name: string; url: string }[] = [];
       const allWatchLinks: { name: string; url: string }[] = [];

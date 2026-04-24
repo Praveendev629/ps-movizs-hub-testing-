@@ -251,10 +251,10 @@ function extractMoviesFromPage(
       
       // Try multiple patterns for hero collections
       const heroPatterns = [
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
         /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]+)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]+)<\/a>/gi
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]+)<\/a>/gi,
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]+)<\/a>/gi
       ];
       
       for (const pattern of heroPatterns) {

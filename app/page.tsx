@@ -456,7 +456,7 @@ export default function HomePage() {
     const n = selectedCategory?.name.toLowerCase() || "";
     const url = selectedCategory?.url?.toLowerCase() || "";
     // Only treat as collection if it's the main A-Z index page, not letter pages
-    return (n.includes("a to z") || n.includes("a-z") || n.includes("atoz")) && !url.includes("/tamil-movies/[a-z]");
+    return (n.includes("a to z") || n.includes("a-z") || n.includes("atoz")) && !url.includes("/tamil-movies/");
   }, [selectedCategory]);
 
   const isYearCollection = useMemo(() => {
@@ -471,6 +471,22 @@ export default function HomePage() {
     movies.length > 0 && movies.every(m => /^[A-Z]$/.test(m.title)),
     [movies]
   );
+
+  // Debug logging to help identify the issue
+  useEffect(() => {
+    if (selectedCategory) {
+      console.log('Frontend Debug:', {
+        categoryName: selectedCategory.name,
+        categoryUrl: selectedCategory.url,
+        moviesCount: movies.length,
+        isLetterCollection,
+        isYearCollection,
+        isCollectionView,
+        isAlphaList,
+        sampleMovies: movies.slice(0, 3)
+      });
+    }
+  }, [selectedCategory, movies, isLetterCollection, isYearCollection, isCollectionView, isAlphaList]);
 
   // ── Splash ──────────────────────────────────────────────────────────────
   if (splash) {

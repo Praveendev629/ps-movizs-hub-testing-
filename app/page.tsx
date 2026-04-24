@@ -1,5 +1,4 @@
 "use client";
-// Cache bust: v2.1 - Hero collections fix
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -223,7 +222,6 @@ function VideoPlayer({ url, title, onClose }: { url: string; title: string; onCl
       )}
       <video ref={videoRef} src={url} className="w-full h-full object-contain"
         crossOrigin="anonymous"
-        preload="metadata"
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
         onTimeUpdate={() => { if (videoRef.current) { setCurrentTime(videoRef.current.currentTime); setProgress(videoRef.current.currentTime / videoRef.current.duration * 100); } }}
         onLoadedData={() => { setBuffering(false); setDuration(videoRef.current?.duration || 0); }}
@@ -231,19 +229,6 @@ function VideoPlayer({ url, title, onClose }: { url: string; title: string; onCl
         onCanPlay={() => { setBuffering(false); }}
         onWaiting={() => { setBuffering(true); }}
         onCanPlayThrough={() => { setBuffering(false); }}
-        onStalled={() => { setBuffering(true); }}
-        onSuspend={() => { setBuffering(true); }}
-        onProgress={() => { 
-          if (videoRef.current && videoRef.current.buffered.length > 0) {
-            const bufferedEnd = videoRef.current.buffered.end(videoRef.current.buffered.length - 1);
-            const duration = videoRef.current.duration;
-            if (bufferedEnd < duration - 5) { // If less than 5 seconds buffered
-              setBuffering(true);
-            } else {
-              setBuffering(false);
-            }
-          }
-        }}
         onError={(e) => { 
           setBuffering(false); 
           console.error('Video error:', e);
@@ -417,7 +402,6 @@ export default function HomePage() {
     try {
       const res = await fetch(`/api/category?url=${encodeURIComponent(cat.url)}&site=${site}`);
       const data = await res.json();
-      console.log(`Frontend: Loaded ${data.length} movies for ${cat.name}`);
       setMovies(data);
     } catch { setMovies([]); }
     finally { setMoviesLoading(false); }
@@ -475,11 +459,7 @@ export default function HomePage() {
     [categories, search]
   );
   const filteredMovies = useMemo(
-    () => {
-      const filtered = movies.filter((m) => m.title.toLowerCase().includes(search.toLowerCase()));
-      console.log(`Frontend: ${filtered.length} filtered movies from ${movies.length} total movies`);
-      return filtered;
-    },
+    () => movies.filter((m) => m.title.toLowerCase().includes(search.toLowerCase())),
     [movies, search]
   );
 
@@ -932,7 +912,7 @@ export default function HomePage() {
                           <div className="flex items-center gap-2 mb-4">
                             <Download className="w-4 h-4 text-zinc-500" />
                             <span className="text-xs font-black uppercase tracking-widest text-zinc-500">
-                              {details.items[0].url.includes("/download/") ? "Download Files" : "Select Quality for Watch Online"}
+                              {details.items[0].url.includes("/download/") ? "Download Files" : "Select Quality / Version"}
                             </span>
                           </div>
                           {details.items
@@ -940,13 +920,7 @@ export default function HomePage() {
                             .map((item, i) => (
                               <button key={i} onClick={() => drillDown(item)}
                                 className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-sm font-medium text-zinc-300 group-hover:text-white text-left">{item.name}</span>
-                                  <div className="flex items-center gap-1">
-                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                    <span className="text-xs text-green-500">Streaming Available</span>
-                                  </div>
-                                </div>
+                                <span className="text-sm font-medium text-zinc-300 group-hover:text-white text-left">{item.name}</span>
                                 <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-red-600 transition-transform group-hover:translate-x-1 shrink-0" />
                               </button>
                             ))}

@@ -812,126 +812,93 @@ export async function GET(req: NextRequest) {
     // Check if this is a movie page with quality options (for moviesda)
     if (site === "moviesda" && items.length > 0) {
       const hasMovieItems = items.some(item => 
-        item.url.includes("-movie/") || item.url.includes("-mp4") || item.url.includes("-hd")
+        item.url.includes("-movie/")
       );
       
       console.log('Movie page detection:', { itemsCount: items.length, hasMovieItems, sampleItem: items[0] });
       
-      // Re-enabled: Auto-resolution for quality pages with multi-level support
-      // Auto-resolve to reduce navigation levels but still show quality options
+      // If this looks like a quality selection page, auto-resolve the first quality option
       if (hasMovieItems) {
-        console.log('Detected movie quality page with multi-level options');
+        console.log('Detected movie quality page, auto-resolving first quality option');
         
-        // Check if this is a level-1 quality page (like "Original", "DVD", etc.)
-        const isLevel1Quality = items.some(item => 
-          item.name.includes("Original") || 
-          item.name.includes("DVD") || 
-          item.name.includes("BluRay") ||
-          item.url.includes("-original-") ||
-          item.url.includes("-dvd") ||
-          item.url.includes("-blu")
-        );
+        // Find the first quality option (prefer 720p, then 1080p, then Original, then 360p, then HD, then any)
+        const qualityOrder = ["720p", "1080p", "Original", "360p", "HD"];
+        let firstQualityItem = null;
         
-        // Check if this is a level-2 quality page (like "720p HD", "1080p HD", etc.)
-        const isLevel2Quality = items.some(item => 
-          item.name.includes("720p") || 
-          item.name.includes("1080p") || 
-          item.name.includes("360p") ||
-          item.name.includes("480p") ||
-          item.url.includes("-720p-") ||
-          item.url.includes("-1080p-") ||
-          item.url.includes("-360p-") ||
-          item.url.includes("-480p-")
-        );
+        for (const quality of qualityOrder) {
+          firstQualityItem = items.find(item => 
+            item.url.includes("-movie/") && item.name.includes(quality)
+          );
+          if (firstQualityItem) break;
+        }
         
-        // Auto-resolve level-2 quality pages (720p, 1080p, etc.) to show watch online links
-        if (isLevel2Quality) {
-          console.log('Auto-resolving level-2 quality page to show watch online links');
+        // If no preferred quality found, take the first movie item
+        if (!firstQualityItem) {
+          firstQualityItem = items.find(item => item.url.includes("-movie/"));
+        }
+        
+        if (firstQualityItem) {
+          console.log('Auto-resolving quality:', firstQualityItem.name);
           
-          // Find the best quality (prefer 720p, then 1080p, then 360p, then 480p)
-          const qualityOrder = ["720p", "1080p", "360p", "480p"];
-          let bestQualityItem = null;
-          
-          for (const quality of qualityOrder) {
-            bestQualityItem = items.find(item => 
-              item.name.includes(quality)
-            );
-            if (bestQualityItem) break;
-          }
-          
-          // If no preferred quality found, take the first item
-          if (!bestQualityItem) {
-            bestQualityItem = items[0];
-          }
-          
-          if (bestQualityItem) {
-            console.log('Auto-resolving to best quality:', bestQualityItem.name);
+          try {
+            // Fetch the quality page to get download/watch links
+            const qualityUrl = firstQualityItem.url.startsWith("http") 
+              ? firstQualityItem.url 
+              : `${siteBase}${firstQualityItem.url}`;
             
-            try {
-              // Fetch the quality page to get download/watch links
-              const qualityUrl = bestQualityItem.url.startsWith("http") 
-                ? bestQualityItem.url 
-                : `${siteBase}${bestQualityItem.url}`;
+            const qualityHtml = await fetchHtml(qualityUrl, siteBase);
+            const qualityItems = extractSubItems(qualityHtml, firstQualityItem.url, site);
+            
+            // Look for download items in the quality page
+            const downloadItems = qualityItems.filter(
+              (i) => /^\/download\//.test(i.url) || i.url.includes('movies.downloadpage.xyz')
+            );
+            
+            if (downloadItems.length > 0) {
+              console.log('Found download items in quality page, resolving...');
               
-              const qualityHtml = await fetchHtml(qualityUrl, siteBase);
-              const qualityItems = extractSubItems(qualityHtml, bestQualityItem.url, site);
-              
-              // Look for download items in the quality page
-              const downloadItems = qualityItems.filter(
-                (i) => /^\/download\//.test(i.url) || i.url.includes('movies.downloadpage.xyz')
-              );
-              
-              if (downloadItems.length > 0) {
-                console.log('Found download items, resolving watch online links...');
-                
-                const allServerLinks: { name: string; url: string }[] = [];
-                const allWatchLinks: { name: string; url: string }[] = [];
+              const allServerLinks: { name: string; url: string }[] = [];
+              const allWatchLinks: { name: string; url: string }[] = [];
 
-                for (const item of downloadItems) {
+              await Promise.all(
+                downloadItems.map(async (item) => {
                   try {
-                    console.log(`Resolving download item: ${item.name} -> ${item.url}`);
                     const resolved = await resolveMoviesdaChain(item.url, siteBase);
                     
-                    console.log(`Resolved ${item.name}: ${resolved.serverLinks.length} server links, ${resolved.watchLinks.length} watch links`);
-                    
-                    // Tag each link with the file name for clarity
                     for (const l of resolved.serverLinks) {
                       allServerLinks.push({
-                        name: `${bestQualityItem.name} — ${item.name} — ${l.name}`,
+                        name: `${firstQualityItem.name} — ${l.name}`,
                         url: l.url,
                       });
                     }
                     for (const l of resolved.watchLinks) {
                       allWatchLinks.push({
-                        name: `${bestQualityItem.name} — ${item.name} — ${l.name}`,
+                        name: `${firstQualityItem.name} — ${l.name}`,
                         url: l.url,
                       });
                     }
                   } catch (e) {
                     console.error("resolve error for quality item", e);
                   }
-                }
-                
-                console.log(`Final result: ${allServerLinks.length} server links, ${allWatchLinks.length} watch links`);
-                
-                // Return the quality options along with resolved download/watch links
-                return NextResponse.json({ 
-                  items: items.filter(item => !item.url.includes(bestQualityItem.url)), // Keep other quality options
-                  serverLinks: allServerLinks, 
-                  watchLinks: allWatchLinks 
-                });
-              }
-            } catch (error) {
-              console.error('Error auto-resolving quality:', error);
-              // Fall back to normal behavior if auto-resolution fails
+                })
+              );
+              
+              // Return the quality options along with resolved download/watch links
+              return NextResponse.json({ 
+                items, 
+                serverLinks: allServerLinks, 
+                watchLinks: allWatchLinks 
+              });
             }
+          } catch (error) {
+            console.error('Error auto-resolving quality:', error);
+            // Fall back to normal behavior if auto-resolution fails
           }
         }
       }
     }
 
-    // Re-enabled: Auto-resolution for download items only (not quality selection)
-    // Users choose quality first, then download items get resolved automatically
+    // If items contain download page links, auto-resolve them all
     const downloadItems = items.filter(
       (i) =>
         (site === "moviesda" && /^\/download\//.test(i.url)) ||
@@ -939,60 +906,54 @@ export async function GET(req: NextRequest) {
     );
 
     if (downloadItems.length > 0) {
-      console.log(`Processing ${downloadItems.length} download items...`);
       const allServerLinks: { name: string; url: string }[] = [];
       const allWatchLinks: { name: string; url: string }[] = [];
 
-      for (const item of downloadItems) {
-        try {
-          console.log(`Resolving download item: ${item.name} -> ${item.url}`);
-          let resolved: {
-            serverLinks: { name: string; url: string }[];
-            watchLinks: { name: string; url: string }[];
-          };
-          if (site === "moviesda") {
-            resolved = await resolveMoviesdaChain(item.url, siteBase);
-          } else {
-            resolved = await resolveIsaidubChain(item.url, siteBase);
+      await Promise.all(
+        downloadItems.map(async (item) => {
+          try {
+            let resolved: {
+              serverLinks: { name: string; url: string }[];
+              watchLinks: { name: string; url: string }[];
+            };
+            if (site === "moviesda") {
+              resolved = await resolveMoviesdaChain(item.url, siteBase);
+            } else {
+              resolved = await resolveIsaidubChain(item.url, siteBase);
+            }
+            // Tag each link with the file name for clarity
+            for (const l of resolved.serverLinks) {
+              allServerLinks.push({
+                name: `${item.name} — ${l.name}`,
+                url: l.url,
+              });
+            }
+            for (const l of resolved.watchLinks) {
+              allWatchLinks.push({
+                name: `${item.name} — ${l.name}`,
+                url: l.url,
+              });
+            }
+          } catch (e) {
+            console.error("resolve error", e);
           }
-          
-          console.log(`Resolved ${item.name}: ${resolved.serverLinks.length} server links, ${resolved.watchLinks.length} watch links`);
-          
-          // Tag each link with the file name for clarity
-          for (const l of resolved.serverLinks) {
-            allServerLinks.push({
-              name: `${item.name} — ${l.name}`,
-              url: l.url,
-            });
-          }
-          for (const l of resolved.watchLinks) {
-            allWatchLinks.push({
-              name: `${item.name} — ${l.name}`,
-              url: l.url,
-            });
-          }
-        } catch (e) {
-          console.error("resolve error for", item.name, e);
-        }
+        })
+      );
+
+      if (allServerLinks.length > 0 || allWatchLinks.length > 0) {
+        return NextResponse.json({
+          items: items.filter(
+            (i) =>
+              !(site === "moviesda" && /^\/download\//.test(i.url)) &&
+              !(site === "isaidub" && /^\/download\/page\//.test(i.url))
+          ),
+          serverLinks: allServerLinks,
+          watchLinks: allWatchLinks,
+        });
       }
-
-      console.log(`Final result: ${allServerLinks.length} server links, ${allWatchLinks.length} watch links`);
-      
-      return NextResponse.json({
-        items: items.filter(
-          (i) =>
-            !(site === "moviesda" && /^\/download\//.test(i.url)) &&
-            !(site === "isaidub" && /^\/download\/page\//.test(i.url))
-        ),
-        serverLinks: allServerLinks,
-        watchLinks: allWatchLinks,
-      });
     }
 
-    // Only return empty results if no download items were found and processed
-    if (downloadItems.length === 0) {
-      return NextResponse.json({ items, serverLinks: [], watchLinks: [] });
-    }
+    return NextResponse.json({ items, serverLinks: [], watchLinks: [] });
   } catch (err) {
     console.error("Details error:", err);
     return NextResponse.json({ items: [], serverLinks: [], watchLinks: [] });

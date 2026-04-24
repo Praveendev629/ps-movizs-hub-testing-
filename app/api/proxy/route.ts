@@ -74,9 +74,7 @@ export async function GET(req: NextRequest) {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       "Access-Control-Allow-Headers": "Range",
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      "Pragma": "no-cache",
-      "Expires": "0",
+      "Cache-Control": "public, max-age=3600",
     });
 
     if (contentLength) {

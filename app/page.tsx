@@ -1,4 +1,5 @@
 "use client";
+// Cache bust: v2.1 - Hero collections fix
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";

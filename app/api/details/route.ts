@@ -813,15 +813,15 @@ export async function GET(req: NextRequest) {
     if (site === "moviesda" && items.length > 0) {
       const hasQualityOptions = items.some(item => 
         item.url.includes("-movie/") && 
-        (item.name.includes("720p") || item.name.includes("1080p") || item.name.includes("360p") || item.name.includes("HD"))
+        (item.name.includes("720p") || item.name.includes("1080p") || item.name.includes("360p") || item.name.includes("HD") || item.name.includes("Original"))
       );
       
       // If this looks like a quality selection page, auto-resolve the first quality option
-      if (hasQualityOptions && items.some(item => item.url.includes("-movie/") && !item.name.includes("Original"))) {
+      if (hasQualityOptions) {
         console.log('Detected movie quality page, auto-resolving first quality option');
         
-        // Find the first quality option (prefer 720p, then 1080p, then 360p, then any)
-        const qualityOrder = ["720p", "1080p", "360p", "HD"];
+        // Find the first quality option (prefer 720p, then 1080p, then Original, then 360p, then HD, then any)
+        const qualityOrder = ["720p", "1080p", "Original", "360p", "HD"];
         let firstQualityItem = null;
         
         for (const quality of qualityOrder) {

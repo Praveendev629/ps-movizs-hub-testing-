@@ -407,6 +407,18 @@ export default function HomePage() {
     finally { setMoviesLoading(false); }
   }, [site]);
 
+  // Open specific page for hero collections
+  const openCategoryPage = useCallback(async (cat: Category, page: number) => {
+    setSelectedCategory(cat); setMoviesLoading(true); setMovies([]); setSearch("");
+    try {
+      const pageUrl = page > 1 ? `${cat.url}?page=${page}` : cat.url;
+      const res = await fetch(`/api/category?url=${encodeURIComponent(pageUrl)}&site=${site}`);
+      const data = await res.json();
+      setMovies(data);
+    } catch { setMovies([]); }
+    finally { setMoviesLoading(false); }
+  }, [site]);
+
   // Open details modal and fetch details for a given URL
   const openDetails = useCallback(async (name: string, url: string, newBreadcrumb?: BreadEntry[]) => {
     setModalOpen(true);
@@ -700,6 +712,25 @@ export default function HomePage() {
                   ))}
                 </AnimatePresence>
               </div>
+              
+              {/* Pagination for hero collections */}
+              {selectedCategory && selectedCategory.url.includes("actor-") && selectedCategory.url.includes("-movies-collection") && (
+                <div className="flex justify-center mt-8 gap-2">
+                  {[1, 2, 3].map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => openCategoryPage(selectedCategory, page)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        page === 1 
+                          ? "bg-red-600 text-white" 
+                          : "bg-white/10 text-zinc-400 hover:bg-white/20 hover:text-white"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+              )}
             )}
           </div>
         ) : (

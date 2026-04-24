@@ -98,6 +98,9 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
       /atob\(["']([^"']+)["']\)/gi,
     ];
 
+    // Collect all video URLs first, then filter and prioritize
+    const foundVideoUrls: { url: string; score: number }[] = [];
+    
     for (const pattern of videoPatterns) {
       let match;
       while ((match = pattern.exec(html)) !== null) {
@@ -105,12 +108,60 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
         if (url && (url.includes('.mp4') || url.includes('.m3u8') || url.includes('.webm') || url.includes('.mkv') || url.includes('.avi') || url.includes('.mov'))) {
           console.log('Found video URL:', url);
           
-          // Cache the result
-          streamCache.set(streamPageUrl, { url, timestamp: Date.now() });
+          // Score the URL to prioritize full movies
+          let score = 0;
+          const urlLower = url.toLowerCase();
           
-          return url;
+          // Penalize sample/trailer content
+          const samplePatterns = [
+            'sample', 'trailer', 'preview', 'demo', 'teaser',
+            'clip', 'snippet', 'excerpt', 'test', 'intro'
+          ];
+          
+          samplePatterns.forEach(pattern => {
+            if (urlLower.includes(pattern)) {
+              score -= 100; // Heavy penalty for samples
+            }
+          });
+          
+          // Bonus for full movie indicators
+          const movieIndicators = [
+            'movie', 'film', 'full', 'complete', 'original',
+            'hd', '720p', '1080p', 'bluray', 'web-dl'
+          ];
+          
+          movieIndicators.forEach(indicator => {
+            if (urlLower.includes(indicator)) {
+              score += 50; // Bonus for movie content
+            }
+          });
+          
+          // Bonus for larger files (extract from URL if possible)
+          const sizeMatch = url.match(/(\d+)mb/i);
+          if (sizeMatch) {
+            const size = parseInt(sizeMatch[1]);
+            if (size > 200) {
+              score += 30; // Large files are likely full movies
+            } else if (size < 50) {
+              score -= 50; // Small files are likely samples
+            }
+          }
+          
+          foundVideoUrls.push({ url, score });
         }
       }
+    }
+    
+    // Sort by score and return the best (highest scoring) URL
+    if (foundVideoUrls.length > 0) {
+      foundVideoUrls.sort((a, b) => b.score - a.score);
+      const bestUrl = foundVideoUrls[0].url;
+      console.log('Selected best video URL:', bestUrl, 'Score:', foundVideoUrls[0].score);
+      
+      // Cache the result
+      streamCache.set(streamPageUrl, { url: bestUrl, timestamp: Date.now() });
+      
+      return bestUrl;
     }
 
     // Look for iframe or embed sources

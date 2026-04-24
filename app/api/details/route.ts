@@ -61,8 +61,40 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 }
 
 function prioritizeAndLimitLinks(links: { name: string; url: string }[], limit: number = 2) {
-  // Priority scoring system
-  const scoredLinks = links.map(link => {
+  // First filter out sample/trailer content
+  const filteredLinks = links.filter(link => {
+    const name = link.name.toLowerCase();
+    const url = link.url.toLowerCase();
+    
+    // Exclude sample, trailer, preview, and demo content
+    const excludePatterns = [
+      'sample', 'trailer', 'preview', 'demo', 'teaser',
+      'clip', 'snippet', 'excerpt', 'test', 'intro',
+      'opening', 'credits', 'behind the scenes', 'making of'
+    ];
+    
+    const isSampleContent = excludePatterns.some(pattern => 
+      name.includes(pattern) || url.includes(pattern)
+    );
+    
+    // Also exclude very small files (likely samples)
+    const sizeMatch = name.match(/(\d+)\s*(mb|gb)/i);
+    if (sizeMatch) {
+      const size = parseInt(sizeMatch[1]);
+      const unit = sizeMatch[2].toLowerCase();
+      const sizeInMB = unit === 'gb' ? size * 1024 : size;
+      
+      // Exclude files smaller than 50MB (likely samples)
+      if (sizeInMB < 50) {
+        return false;
+      }
+    }
+    
+    return !isSampleContent;
+  });
+  
+  // Priority scoring system for remaining links
+  const scoredLinks = filteredLinks.map(link => {
     let score = 0;
     const name = link.name.toLowerCase();
     const url = link.url.toLowerCase();
@@ -90,9 +122,35 @@ function prioritizeAndLimitLinks(links: { name: string; url: string }[], limit: 
       score -= 10;
     }
     
+    // Bonus for full movie indicators
+    const fullMovieIndicators = [
+      'full movie', 'complete movie', 'movie', 'film',
+      'original', 'hd', '720p', '1080p', 'bluray', 'web-dl'
+    ];
+    
+    fullMovieIndicators.forEach(indicator => {
+      if (name.includes(indicator)) {
+        score += 15;
+      }
+    });
+    
     // Prioritize links with better descriptions
     if (link.name.length > 20) {
       score += 5;
+    }
+    
+    // Bonus for larger file sizes (likely full movies)
+    const sizeMatch = name.match(/(\d+)\s*(mb|gb)/i);
+    if (sizeMatch) {
+      const size = parseInt(sizeMatch[1]);
+      const unit = sizeMatch[2].toLowerCase();
+      const sizeInMB = unit === 'gb' ? size * 1024 : size;
+      
+      if (sizeInMB > 500) {
+        score += 20; // Large files are likely full movies
+      } else if (sizeInMB > 200) {
+        score += 10; // Medium files
+      }
     }
     
     return { ...link, score };

@@ -809,6 +809,94 @@ export async function GET(req: NextRequest) {
 
     const items = extractSubItems(html, urlParam, site);
 
+    // Check if this is a movie page with quality options (for moviesda)
+    if (site === "moviesda" && items.length > 0) {
+      const hasQualityOptions = items.some(item => 
+        item.url.includes("-movie/") && 
+        (item.name.includes("720p") || item.name.includes("1080p") || item.name.includes("360p") || item.name.includes("HD"))
+      );
+      
+      // If this looks like a quality selection page, auto-resolve the first quality option
+      if (hasQualityOptions && items.some(item => item.url.includes("-movie/") && !item.name.includes("Original"))) {
+        console.log('Detected movie quality page, auto-resolving first quality option');
+        
+        // Find the first quality option (prefer 720p, then 1080p, then 360p, then any)
+        const qualityOrder = ["720p", "1080p", "360p", "HD"];
+        let firstQualityItem = null;
+        
+        for (const quality of qualityOrder) {
+          firstQualityItem = items.find(item => 
+            item.url.includes("-movie/") && item.name.includes(quality)
+          );
+          if (firstQualityItem) break;
+        }
+        
+        // If no preferred quality found, take the first movie item
+        if (!firstQualityItem) {
+          firstQualityItem = items.find(item => item.url.includes("-movie/"));
+        }
+        
+        if (firstQualityItem) {
+          console.log('Auto-resolving quality:', firstQualityItem.name);
+          
+          try {
+            // Fetch the quality page to get download/watch links
+            const qualityUrl = firstQualityItem.url.startsWith("http") 
+              ? firstQualityItem.url 
+              : `${siteBase}${firstQualityItem.url}`;
+            
+            const qualityHtml = await fetchHtml(qualityUrl, siteBase);
+            const qualityItems = extractSubItems(qualityHtml, firstQualityItem.url, site);
+            
+            // Look for download items in the quality page
+            const downloadItems = qualityItems.filter(
+              (i) => /^\/download\//.test(i.url) || i.url.includes('movies.downloadpage.xyz')
+            );
+            
+            if (downloadItems.length > 0) {
+              console.log('Found download items in quality page, resolving...');
+              
+              const allServerLinks: { name: string; url: string }[] = [];
+              const allWatchLinks: { name: string; url: string }[] = [];
+
+              await Promise.all(
+                downloadItems.map(async (item) => {
+                  try {
+                    const resolved = await resolveMoviesdaChain(item.url, siteBase);
+                    
+                    for (const l of resolved.serverLinks) {
+                      allServerLinks.push({
+                        name: `${firstQualityItem.name} — ${l.name}`,
+                        url: l.url,
+                      });
+                    }
+                    for (const l of resolved.watchLinks) {
+                      allWatchLinks.push({
+                        name: `${firstQualityItem.name} — ${l.name}`,
+                        url: l.url,
+                      });
+                    }
+                  } catch (e) {
+                    console.error("resolve error for quality item", e);
+                  }
+                })
+              );
+              
+              // Return the quality options along with resolved download/watch links
+              return NextResponse.json({ 
+                items, 
+                serverLinks: allServerLinks, 
+                watchLinks: allWatchLinks 
+              });
+            }
+          } catch (error) {
+            console.error('Error auto-resolving quality:', error);
+            // Fall back to normal behavior if auto-resolution fails
+          }
+        }
+      }
+    }
+
     // If items contain download page links, auto-resolve them all
     const downloadItems = items.filter(
       (i) =>

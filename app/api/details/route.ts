@@ -817,6 +817,9 @@ export async function GET(req: NextRequest) {
       
       console.log('Movie page detection:', { itemsCount: items.length, hasMovieItems, sampleItem: items[0] });
       
+      // DISABLED: Auto-resolution logic - show quality options to users instead
+      // Users should be able to choose quality like on the original moviesda site
+      /*
       // If this looks like a quality selection page, auto-resolve the first quality option
       if (hasMovieItems) {
         console.log('Detected movie quality page, auto-resolving first quality option');
@@ -898,6 +901,7 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+      */
     }
 
     // If items contain download page links, auto-resolve them all

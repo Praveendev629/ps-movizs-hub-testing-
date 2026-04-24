@@ -466,6 +466,12 @@ export default function HomePage() {
 
   const isCollectionView = isYearCollection || (isLetterCollection && movies.every(m => /^[A-Z]$/.test(m.title)));
 
+  // Additional check: if URL contains /tamil-movies/ and movies are not single letters, show as movie grid
+  const isLetterPageWithMovies = useMemo(() => {
+    const url = selectedCategory?.url?.toLowerCase() || "";
+    return url.includes("/tamil-movies/") && movies.length > 0 && !movies.every(m => /^[A-Z]$/.test(m.title));
+  }, [selectedCategory, movies]);
+
   // When movies are all single-letter (A-Z), show as letter buttons
   const isAlphaList = useMemo(() =>
     movies.length > 0 && movies.every(m => /^[A-Z]$/.test(m.title)),
@@ -638,7 +644,7 @@ export default function HomePage() {
                   ))}
                 </AnimatePresence>
               </div>
-            ) : isCollectionView ? (
+            ) : isCollectionView && !isLetterPageWithMovies ? (
               /* Collection/year sub-category buttons */
               <div className={`grid ${isYearCollection ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"}`}>
                 <AnimatePresence mode="popLayout">

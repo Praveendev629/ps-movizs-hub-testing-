@@ -913,53 +913,45 @@ export async function GET(req: NextRequest) {
     );
 
     if (downloadItems.length > 0) {
+      console.log(`Processing ${downloadItems.length} download items...`);
       const allServerLinks: { name: string; url: string }[] = [];
       const allWatchLinks: { name: string; url: string }[] = [];
 
-      await Promise.all(
-        downloadItems.map(async (item) => {
-          try {
-            let resolved: {
-              serverLinks: { name: string; url: string }[];
-              watchLinks: { name: string; url: string }[];
-            };
-            if (site === "moviesda") {
-              resolved = await resolveMoviesdaChain(item.url, siteBase);
-            } else {
-              resolved = await resolveIsaidubChain(item.url, siteBase);
-            }
-            // Tag each link with the file name for clarity
-            for (const l of resolved.serverLinks) {
-              allServerLinks.push({
-                name: `${item.name} — ${l.name}`,
-                url: l.url,
-              });
-            }
-            for (const l of resolved.watchLinks) {
-              allWatchLinks.push({
-                name: `${item.name} — ${l.name}`,
-                url: l.url,
-              });
-            }
-          } catch (e) {
-            console.error("resolve error", e);
+      for (const item of downloadItems) {
+        try {
+          console.log(`Resolving download item: ${item.name} -> ${item.url}`);
+          let resolved: {
+            serverLinks: { name: string; url: string }[];
+            watchLinks: { name: string; url: string }[];
+          };
+          if (site === "moviesda") {
+            resolved = await resolveMoviesdaChain(item.url, siteBase);
+          } else {
+            resolved = await resolveIsaidubChain(item.url, siteBase);
           }
-        })
-      );
-
-      if (allServerLinks.length > 0 || allWatchLinks.length > 0) {
-        return NextResponse.json({
-          items: items.filter(
-            (i) =>
-              !(site === "moviesda" && /^\/download\//.test(i.url)) &&
-              !(site === "isaidub" && /^\/download\/page\//.test(i.url))
-          ),
-          serverLinks: allServerLinks,
-          watchLinks: allWatchLinks,
-        });
+          
+          console.log(`Resolved ${item.name}: ${resolved.serverLinks.length} server links, ${resolved.watchLinks.length} watch links`);
+          
+          // Tag each link with the file name for clarity
+          for (const l of resolved.serverLinks) {
+            allServerLinks.push({
+              name: `${item.name} — ${l.name}`,
+              url: l.url,
+            });
+          }
+          for (const l of resolved.watchLinks) {
+            allWatchLinks.push({
+              name: `${item.name} — ${l.name}`,
+              url: l.url,
+            });
+          }
+        } catch (e) {
+          console.error("resolve error for", item.name, e);
+        }
       }
+
+      console.log(`Final result: ${allServerLinks.length} server links, ${allWatchLinks.length} watch links`);
       
-      // Return items even if no links were found (for quality pages)
       return NextResponse.json({
         items: items.filter(
           (i) =>

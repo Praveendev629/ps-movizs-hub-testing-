@@ -712,25 +712,6 @@ export default function HomePage() {
                   ))}
                 </AnimatePresence>
               </div>
-              
-              {/* Pagination for hero collections */}
-              {selectedCategory && selectedCategory.url.includes("actor-") && selectedCategory.url.includes("-movies-collection") && (
-                <div className="flex justify-center mt-8 gap-2">
-                  {[1, 2, 3].map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => openCategoryPage(selectedCategory, page)}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                        page === 1 
-                          ? "bg-red-600 text-white" 
-                          : "bg-white/10 text-zinc-400 hover:bg-white/20 hover:text-white"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
-              )}
             )}
           </div>
         ) : (

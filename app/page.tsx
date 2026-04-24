@@ -20,6 +20,8 @@ interface MovieDetails {
   items: LinkItem[];
   serverLinks: LinkItem[];
   watchLinks: LinkItem[];
+  qualityGroups?: { [key: string]: LinkItem[] };
+  isQualityPage?: boolean;
 }
 interface WatchState { url: string; name: string }
 
@@ -902,42 +904,43 @@ export default function HomePage() {
                               className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
                               <span className="font-semibold text-zinc-300 group-hover:text-white text-sm text-left">{link.name}</span>
                               <div className="w-10 h-10 bg-red-600/10 rounded-xl flex items-center justify-center group-hover:bg-red-600 transition-colors shrink-0 ml-2">
-                                <Download className="w-5 h-5 text-red-600 group-hover:text-white" />
+                            <div key={quality} className="mb-6">
+                              <h4 className="text-lg font-bold text-red-600 mb-3 flex items-center gap-2">
+                                <span className="w-2 h-6 bg-red-600 rounded-full" />
+                                {quality}
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {items
+                                  .filter((item: LinkItem) => item.name.toLowerCase().includes(subSearch.toLowerCase()))
+                                  .map((item: LinkItem, i: number) => (
+                                    <button key={i} onClick={() => drillDown(item)}
+                                      className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group text-left">
+                                      <span className="text-sm font-medium text-zinc-400 group-hover:text-white line-clamp-1">{item.name}</span>
+                                      <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-red-600 transition-transform group-hover:translate-x-1 shrink-0" />
+                                    </button>
+                                  ))}
                               </div>
-                            </a>
-                          ))}
-                        </>
-                      ) : details.items.length > 0 ? (
-                        <>
-                          <div className="flex items-center gap-2 mb-4">
-                            <Download className="w-4 h-4 text-zinc-500" />
-                            <span className="text-xs font-black uppercase tracking-widest text-zinc-500">
-                              {details.items[0].url.includes("/download/") ? "Download Files" : "Select Quality / Version"}
-                            </span>
-                          </div>
-                          {details.items
-                            .filter(item => item.name.toLowerCase().includes(subSearch.toLowerCase()))
-                            .map((item, i) => (
+                            </div>
+                          ))
+                        ) : (
+                          // Render regular items list
+                          details.items
+                            .filter((item: LinkItem) => item.name.toLowerCase().includes(subSearch.toLowerCase()))
+                            .map((item: LinkItem, i: number) => (
                               <button key={i} onClick={() => drillDown(item)}
-                                className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
-                                <span className="text-sm font-medium text-zinc-300 group-hover:text-white text-left">{item.name}</span>
+                                className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group text-left">
+                                <span className="text-sm font-medium text-zinc-400 group-hover:text-white line-clamp-1">{item.name}</span>
                                 <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-red-600 transition-transform group-hover:translate-x-1 shrink-0" />
                               </button>
-                            ))}
-                          {details.items.filter(i => i.name.toLowerCase().includes(subSearch.toLowerCase())).length === 0 && subSearch && (
-                            <div className="py-12 text-center">
-                              <Search className="w-8 h-8 text-zinc-800 mx-auto mb-4" />
-                              <p className="text-zinc-600 text-sm">No results for &quot;{subSearch}&quot;</p>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="py-12 text-center">
-                          <Film className="w-10 h-10 text-zinc-800 mx-auto mb-4" />
-                          <p className="text-zinc-500 text-sm font-medium">No links found</p>
-                          <p className="text-zinc-700 text-xs mt-1">Try navigating back and selecting a different option</p>
-                        </div>
-                      )}
+                            ))
+                        )} : (
+                          <div className="py-12 text-center">
+                            <Film className="w-10 h-10 text-zinc-800 mx-auto mb-4" />
+                            <p className="text-zinc-500 text-sm font-medium">No links found</p>
+                            <p className="text-zinc-700 text-xs mt-1">Try navigating back and selecting a different option</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : null}

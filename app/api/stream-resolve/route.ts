@@ -127,7 +127,8 @@ async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
           // Bonus for full movie indicators
           const movieIndicators = [
             'movie', 'film', 'full', 'complete', 'original',
-            'hd', '720p', '1080p', 'bluray', 'web-dl'
+            'hd', '720p', '1080p', 'bluray', 'web-dl',
+            '2024', '2025', '2026', '2023', '2022', '2021', '2020'
           ];
           
           movieIndicators.forEach(indicator => {

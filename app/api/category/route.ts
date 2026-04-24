@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SITES: Record<string, string> = {
-  moviesda: "https://moviesda18.com",
+  moviesda: "https://moviesda19.com",
   isaidub: "https://isaidub.love",
   animesalt: "https://animesalt.ac",
 };
@@ -174,7 +174,7 @@ function usesMoviesdaPathPagination(html: string): boolean {
 
 function isMoviesdaLetterPageUrl(url: string): boolean {
   const cleaned = url.split("?")[0].replace(/\/+$/, "");
-  return /(?:atoz|tamil-movies)\/[a-zA-Z](?:\/page\/\d+)?$/.test(cleaned);
+  return /(?:atoz|tamil-movies)\/[a-zA-Z](?:\/\?page=\d+)?$/.test(cleaned);
 }
 
 function isIsaidubLetterPageUrl(url: string): boolean {
@@ -244,19 +244,32 @@ function extractMoviesFromPage(
   }
   
   // If this is a moviesda letter page, parse movie item links directly before fallback
-  if (site === "moviesda" && /\/tamil-movies\/[a-zA-Z](?:\/page\/\d+)?$/.test(baseUrl)) {
-    const movieLinkRegex = /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-(?:movie|moviesda)(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi;
-    let m2: RegExpExecArray | null;
-    while ((m2 = movieLinkRegex.exec(html)) !== null) {
-      const href = m2[1].trim();
-      const title = m2[2].replace(/<[^>]*>/g, "").trim();
-      const lower = title.toLowerCase();
-      if (!title || title.length < 3) continue;
-      if (lower.includes("collection") || lower.includes("download") || lower.includes("web series") || lower.includes("genres") || lower.includes("dubbed")) continue;
-      if (href.endsWith("/tamil-movies") || href.includes("tamil-movies-collection")) continue;
-      const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
-      if (!movies.find(m => m.url === normalizedHref)) {
-        movies.push({ title, url: normalizedHref });
+  if (site === "moviesda" && /\/tamil-movies\/[a-zA-Z](?:\/\?page=\d+)?$/.test(baseUrl)) {
+    // Multiple patterns for moviesda19.com letter pages
+    const moviePatterns = [
+      // Pattern for movie links with year and format
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-movie(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi,
+      // Pattern for movie links without year
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-tamil-movie(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi,
+      // Pattern for web series
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-web-series(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi,
+      // Generic pattern for any movie link
+      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-(?:\d{4}-)?tamil-(?:movie|web-series)(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi
+    ];
+    
+    for (const pattern of moviePatterns) {
+      let m2: RegExpExecArray | null;
+      while ((m2 = pattern.exec(html)) !== null) {
+        const href = m2[1].trim();
+        const title = m2[2].replace(/<[^>]*>/g, "").trim();
+        const lower = title.toLowerCase();
+        if (!title || title.length < 3) continue;
+        if (lower.includes("collection") || lower.includes("download") || lower.includes("genres") || lower.includes("dubbed")) continue;
+        if (href.endsWith("/tamil-movies") || href.includes("tamil-movies-collection")) continue;
+        const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
+        if (!movies.find(m => m.url === normalizedHref)) {
+          movies.push({ title, url: normalizedHref });
+        }
       }
     }
   }

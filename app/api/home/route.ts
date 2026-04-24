@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
 const SITES: Record<string, string> = {
-  moviesda: "https://moviesda18.com",
+  moviesda: "https://moviesda19.com",
   isaidub: "https://isaidub.love",
   animesalt: "https://animesalt.ac",
 };

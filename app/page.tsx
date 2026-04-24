@@ -451,32 +451,23 @@ export default function HomePage() {
     [movies, search]
   );
 
-  // Detect if category is a "collection" type (shows sub-categories, not movie cards)
-  const isLetterCollection = useMemo(() => {
-    const n = selectedCategory?.name.toLowerCase() || "";
-    const url = selectedCategory?.url?.toLowerCase() || "";
-    // Only treat as collection if it's the main A-Z index page, not letter pages
-    return (n.includes("a to z") || n.includes("a-z") || n.includes("atoz")) && !url.includes("/tamil-movies/");
-  }, [selectedCategory]);
-
-  const isYearCollection = useMemo(() => {
-    const n = selectedCategory?.name.toLowerCase() || "";
-    return n.includes("yearly") || n.includes("year-wise");
-  }, [selectedCategory]);
-
-  const isCollectionView = isYearCollection || (isLetterCollection && movies.every(m => /^[A-Z]$/.test(m.title)));
-
-  // Additional check: if URL contains /tamil-movies/ and movies are not single letters, show as movie grid
-  const isLetterPageWithMovies = useMemo(() => {
-    const url = selectedCategory?.url?.toLowerCase() || "";
-    return url.includes("/tamil-movies/") && movies.length > 0 && !movies.every(m => /^[A-Z]$/.test(m.title));
-  }, [selectedCategory, movies]);
-
-  // When movies are all single-letter (A-Z), show as letter buttons
+  // Simple detection: if movies are single letters (A-Z), show letter buttons
   const isAlphaList = useMemo(() =>
     movies.length > 0 && movies.every(m => /^[A-Z]$/.test(m.title)),
     [movies]
   );
+
+  // Simple detection: if URL contains /tamil-movies/ and has movies, show movie grid
+  const isLetterPage = useMemo(() => {
+    const url = selectedCategory?.url?.toLowerCase() || "";
+    return url.includes("/tamil-movies/") && movies.length > 0;
+  }, [selectedCategory, movies]);
+
+  // Year collection detection
+  const isYearCollection = useMemo(() => {
+    const n = selectedCategory?.name.toLowerCase() || "";
+    return n.includes("yearly") || n.includes("year-wise");
+  }, [selectedCategory]);
 
   // Debug logging to help identify the issue
   useEffect(() => {
@@ -485,14 +476,13 @@ export default function HomePage() {
         categoryName: selectedCategory.name,
         categoryUrl: selectedCategory.url,
         moviesCount: movies.length,
-        isLetterCollection,
+        isLetterPage,
         isYearCollection,
-        isCollectionView,
         isAlphaList,
         sampleMovies: movies.slice(0, 3)
       });
     }
-  }, [selectedCategory, movies, isLetterCollection, isYearCollection, isCollectionView, isAlphaList]);
+  }, [selectedCategory, movies, isLetterPage, isYearCollection, isAlphaList]);
 
   // ── Splash ──────────────────────────────────────────────────────────────
   if (splash) {
@@ -626,7 +616,7 @@ export default function HomePage() {
                 <Loader2 className="w-10 h-10 text-red-600 animate-spin" />
                 <p className="text-zinc-500 font-medium">Powering up the p.s movizs engine...</p>
               </div>
-            ) : isLetterPageWithMovies ? (
+            ) : isLetterPage ? (
               /* Movie grid for letter pages */
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                 <AnimatePresence mode="popLayout">
@@ -666,9 +656,9 @@ export default function HomePage() {
                   ))}
                 </AnimatePresence>
               </div>
-            ) : isCollectionView && !isLetterPageWithMovies ? (
-              /* Collection/year sub-category buttons */
-              <div className={`grid ${isYearCollection ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"}`}>
+            ) : isYearCollection ? (
+              /* Year collection buttons */
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                 <AnimatePresence mode="popLayout">
                   {filteredMovies.map((movie, i) => {
                     const yearMatch = movie.title.match(/\d{4}/);

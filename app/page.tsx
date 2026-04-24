@@ -454,7 +454,9 @@ export default function HomePage() {
   // Detect if category is a "collection" type (shows sub-categories, not movie cards)
   const isLetterCollection = useMemo(() => {
     const n = selectedCategory?.name.toLowerCase() || "";
-    return n.includes("a to z") || n.includes("a-z") || n.includes("atoz");
+    const url = selectedCategory?.url?.toLowerCase() || "";
+    // Only treat as collection if it's the main A-Z index page, not letter pages
+    return (n.includes("a to z") || n.includes("a-z") || n.includes("atoz")) && !url.includes("/tamil-movies/[a-z]");
   }, [selectedCategory]);
 
   const isYearCollection = useMemo(() => {
@@ -612,7 +614,7 @@ export default function HomePage() {
                       exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: 0.01 * i }}
                       onClick={() => {
                         // Opening a letter: load movies for that letter
-                        openCategory({ name: `${selectedCategory.name} - ${movie.title}`, url: movie.url });
+                        openCategory({ name: `Letter ${movie.title} - Tamil Movies`, url: movie.url });
                       }}
                       className="flex items-center justify-center py-8 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
                       <span className="text-2xl font-black text-zinc-300 group-hover:text-red-500 transition-colors">{movie.title}</span>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Simple in-memory cache for stream URLs (reset on server restart)
 const streamCache = new Map<string, { url: string; timestamp: number }>();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes - shorter cache for better streaming
 
 async function resolveVideoUrl(streamPageUrl: string): Promise<string | null> {
   try {

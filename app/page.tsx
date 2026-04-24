@@ -223,6 +223,7 @@ function VideoPlayer({ url, title, onClose }: { url: string; title: string; onCl
       )}
       <video ref={videoRef} src={url} className="w-full h-full object-contain"
         crossOrigin="anonymous"
+        preload="metadata"
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
         onTimeUpdate={() => { if (videoRef.current) { setCurrentTime(videoRef.current.currentTime); setProgress(videoRef.current.currentTime / videoRef.current.duration * 100); } }}
         onLoadedData={() => { setBuffering(false); setDuration(videoRef.current?.duration || 0); }}
@@ -230,6 +231,19 @@ function VideoPlayer({ url, title, onClose }: { url: string; title: string; onCl
         onCanPlay={() => { setBuffering(false); }}
         onWaiting={() => { setBuffering(true); }}
         onCanPlayThrough={() => { setBuffering(false); }}
+        onStalled={() => { setBuffering(true); }}
+        onSuspend={() => { setBuffering(true); }}
+        onProgress={() => { 
+          if (videoRef.current && videoRef.current.buffered.length > 0) {
+            const bufferedEnd = videoRef.current.buffered.end(videoRef.current.buffered.length - 1);
+            const duration = videoRef.current.duration;
+            if (bufferedEnd < duration - 5) { // If less than 5 seconds buffered
+              setBuffering(true);
+            } else {
+              setBuffering(false);
+            }
+          }
+        }}
         onError={(e) => { 
           setBuffering(false); 
           console.error('Video error:', e);

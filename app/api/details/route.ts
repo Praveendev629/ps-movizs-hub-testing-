@@ -817,91 +817,117 @@ export async function GET(req: NextRequest) {
       
       console.log('Movie page detection:', { itemsCount: items.length, hasMovieItems, sampleItem: items[0] });
       
-      // DISABLED: Auto-resolution logic - show quality options to users instead
-      // Users should be able to choose quality like on the original moviesda site
-      /*
-      // If this looks like a quality selection page, auto-resolve the first quality option
+      // Re-enabled: Auto-resolution for quality pages with multi-level support
+      // Auto-resolve to reduce navigation levels but still show quality options
       if (hasMovieItems) {
-        console.log('Detected movie quality page, auto-resolving first quality option');
+        console.log('Detected movie quality page with multi-level options');
         
-        // Find the first quality option (prefer 720p, then 1080p, then Original, then 360p, then HD, then any)
-        const qualityOrder = ["720p", "1080p", "Original", "360p", "HD"];
-        let firstQualityItem = null;
+        // Check if this is a level-1 quality page (like "Original", "DVD", etc.)
+        const isLevel1Quality = items.some(item => 
+          item.name.includes("Original") || 
+          item.name.includes("DVD") || 
+          item.name.includes("BluRay") ||
+          item.url.includes("-original-") ||
+          item.url.includes("-dvd") ||
+          item.url.includes("-blu")
+        );
         
-        for (const quality of qualityOrder) {
-          firstQualityItem = items.find(item => 
-            (item.url.includes("-movie/") || item.url.includes("-mp4") || item.url.includes("-hd")) && item.name.includes(quality)
-          );
-          if (firstQualityItem) break;
-        }
+        // Check if this is a level-2 quality page (like "720p HD", "1080p HD", etc.)
+        const isLevel2Quality = items.some(item => 
+          item.name.includes("720p") || 
+          item.name.includes("1080p") || 
+          item.name.includes("360p") ||
+          item.name.includes("480p") ||
+          item.url.includes("-720p-") ||
+          item.url.includes("-1080p-") ||
+          item.url.includes("-360p-") ||
+          item.url.includes("-480p-")
+        );
         
-        // If no preferred quality found, take the first movie item
-        if (!firstQualityItem) {
-          firstQualityItem = items.find(item => 
-            item.url.includes("-movie/") || item.url.includes("-mp4") || item.url.includes("-hd")
-          );
-        }
-        
-        if (firstQualityItem) {
-          console.log('Auto-resolving quality:', firstQualityItem.name);
+        // Auto-resolve level-2 quality pages (720p, 1080p, etc.) to show watch online links
+        if (isLevel2Quality) {
+          console.log('Auto-resolving level-2 quality page to show watch online links');
           
-          try {
-            // Fetch the quality page to get download/watch links
-            const qualityUrl = firstQualityItem.url.startsWith("http") 
-              ? firstQualityItem.url 
-              : `${siteBase}${firstQualityItem.url}`;
-            
-            const qualityHtml = await fetchHtml(qualityUrl, siteBase);
-            const qualityItems = extractSubItems(qualityHtml, firstQualityItem.url, site);
-            
-            // Look for download items in the quality page
-            const downloadItems = qualityItems.filter(
-              (i) => /^\/download\//.test(i.url) || i.url.includes('movies.downloadpage.xyz')
+          // Find the best quality (prefer 720p, then 1080p, then 360p, then 480p)
+          const qualityOrder = ["720p", "1080p", "360p", "480p"];
+          let bestQualityItem = null;
+          
+          for (const quality of qualityOrder) {
+            bestQualityItem = items.find(item => 
+              item.name.includes(quality)
             );
+            if (bestQualityItem) break;
+          }
+          
+          // If no preferred quality found, take the first item
+          if (!bestQualityItem) {
+            bestQualityItem = items[0];
+          }
+          
+          if (bestQualityItem) {
+            console.log('Auto-resolving to best quality:', bestQualityItem.name);
             
-            if (downloadItems.length > 0) {
-              console.log('Found download items in quality page, resolving...');
+            try {
+              // Fetch the quality page to get download/watch links
+              const qualityUrl = bestQualityItem.url.startsWith("http") 
+                ? bestQualityItem.url 
+                : `${siteBase}${bestQualityItem.url}`;
               
-              const allServerLinks: { name: string; url: string }[] = [];
-              const allWatchLinks: { name: string; url: string }[] = [];
+              const qualityHtml = await fetchHtml(qualityUrl, siteBase);
+              const qualityItems = extractSubItems(qualityHtml, bestQualityItem.url, site);
+              
+              // Look for download items in the quality page
+              const downloadItems = qualityItems.filter(
+                (i) => /^\/download\//.test(i.url) || i.url.includes('movies.downloadpage.xyz')
+              );
+              
+              if (downloadItems.length > 0) {
+                console.log('Found download items, resolving watch online links...');
+                
+                const allServerLinks: { name: string; url: string }[] = [];
+                const allWatchLinks: { name: string; url: string }[] = [];
 
-              await Promise.all(
-                downloadItems.map(async (item) => {
+                for (const item of downloadItems) {
                   try {
+                    console.log(`Resolving download item: ${item.name} -> ${item.url}`);
                     const resolved = await resolveMoviesdaChain(item.url, siteBase);
                     
+                    console.log(`Resolved ${item.name}: ${resolved.serverLinks.length} server links, ${resolved.watchLinks.length} watch links`);
+                    
+                    // Tag each link with the file name for clarity
                     for (const l of resolved.serverLinks) {
                       allServerLinks.push({
-                        name: `${firstQualityItem.name} — ${l.name}`,
+                        name: `${bestQualityItem.name} — ${item.name} — ${l.name}`,
                         url: l.url,
                       });
                     }
                     for (const l of resolved.watchLinks) {
                       allWatchLinks.push({
-                        name: `${firstQualityItem.name} — ${l.name}`,
+                        name: `${bestQualityItem.name} — ${item.name} — ${l.name}`,
                         url: l.url,
                       });
                     }
                   } catch (e) {
                     console.error("resolve error for quality item", e);
                   }
-                })
-              );
-              
-              // Return the quality options along with resolved download/watch links
-              return NextResponse.json({ 
-                items, 
-                serverLinks: allServerLinks, 
-                watchLinks: allWatchLinks 
-              });
+                }
+                
+                console.log(`Final result: ${allServerLinks.length} server links, ${allWatchLinks.length} watch links`);
+                
+                // Return the quality options along with resolved download/watch links
+                return NextResponse.json({ 
+                  items: items.filter(item => !item.url.includes(bestQualityItem.url)), // Keep other quality options
+                  serverLinks: allServerLinks, 
+                  watchLinks: allWatchLinks 
+                });
+              }
+            } catch (error) {
+              console.error('Error auto-resolving quality:', error);
+              // Fall back to normal behavior if auto-resolution fails
             }
-          } catch (error) {
-            console.error('Error auto-resolving quality:', error);
-            // Fall back to normal behavior if auto-resolution fails
           }
         }
       }
-      */
     }
 
     // Re-enabled: Auto-resolution for download items only (not quality selection)

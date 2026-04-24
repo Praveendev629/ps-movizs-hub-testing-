@@ -487,8 +487,13 @@ export async function GET(req: NextRequest) {
       for (const pattern of heroPatterns) {
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(firstHtml)) !== null) {
-          const title = match[1].trim();
-          const href = match[2].trim();
+          let title = match[1].trim();
+          let href = match[2].trim();
+          
+          // Fix field mapping if they're swapped
+          if (title.startsWith("/actor-") && href.includes("Movies Collection")) {
+            [title, href] = [href, title];
+          }
           
           console.log(`Direct found hero: ${title} -> ${href}`);
           

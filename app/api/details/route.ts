@@ -812,7 +812,7 @@ export async function GET(req: NextRequest) {
     // Check if this is a movie page with quality options (for moviesda)
     if (site === "moviesda" && items.length > 0) {
       const hasMovieItems = items.some(item => 
-        item.url.includes("-movie/")
+        item.url.includes("-movie/") || item.url.includes("-mp4") || item.url.includes("-hd")
       );
       
       console.log('Movie page detection:', { itemsCount: items.length, hasMovieItems, sampleItem: items[0] });
@@ -827,14 +827,16 @@ export async function GET(req: NextRequest) {
         
         for (const quality of qualityOrder) {
           firstQualityItem = items.find(item => 
-            item.url.includes("-movie/") && item.name.includes(quality)
+            (item.url.includes("-movie/") || item.url.includes("-mp4") || item.url.includes("-hd")) && item.name.includes(quality)
           );
           if (firstQualityItem) break;
         }
         
         // If no preferred quality found, take the first movie item
         if (!firstQualityItem) {
-          firstQualityItem = items.find(item => item.url.includes("-movie/"));
+          firstQualityItem = items.find(item => 
+            item.url.includes("-movie/") || item.url.includes("-mp4") || item.url.includes("-hd")
+          );
         }
         
         if (firstQualityItem) {

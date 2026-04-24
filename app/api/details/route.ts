@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SITES: Record<string, string> = {
-  moviesda: "https://moviesda19.com",
+  moviesda: "https://moviesda18.com",
   isaidub: "https://isaidub.love",
   animesalt: "https://animesalt.ac",
 };
@@ -61,40 +61,8 @@ function dedupeLinks(links: { name: string; url: string }[]) {
 }
 
 function prioritizeAndLimitLinks(links: { name: string; url: string }[], limit: number = 2) {
-  // First filter out sample/trailer content
-  const filteredLinks = links.filter(link => {
-    const name = link.name.toLowerCase();
-    const url = link.url.toLowerCase();
-    
-    // Exclude sample, trailer, preview, and demo content
-    const excludePatterns = [
-      'sample', 'trailer', 'preview', 'demo', 'teaser',
-      'clip', 'snippet', 'excerpt', 'test', 'intro',
-      'opening', 'credits', 'behind the scenes', 'making of'
-    ];
-    
-    const isSampleContent = excludePatterns.some(pattern => 
-      name.includes(pattern) || url.includes(pattern)
-    );
-    
-    // Also exclude very small files (likely samples)
-    const sizeMatch = name.match(/(\d+)\s*(mb|gb)/i);
-    if (sizeMatch) {
-      const size = parseInt(sizeMatch[1]);
-      const unit = sizeMatch[2].toLowerCase();
-      const sizeInMB = unit === 'gb' ? size * 1024 : size;
-      
-      // Exclude files smaller than 50MB (likely samples)
-      if (sizeInMB < 50) {
-        return false;
-      }
-    }
-    
-    return !isSampleContent;
-  });
-  
-  // Priority scoring system for remaining links
-  const scoredLinks = filteredLinks.map(link => {
+  // Priority scoring system
+  const scoredLinks = links.map(link => {
     let score = 0;
     const name = link.name.toLowerCase();
     const url = link.url.toLowerCase();
@@ -122,35 +90,9 @@ function prioritizeAndLimitLinks(links: { name: string; url: string }[], limit: 
       score -= 10;
     }
     
-    // Bonus for full movie indicators
-    const fullMovieIndicators = [
-      'full movie', 'complete movie', 'movie', 'film',
-      'original', 'hd', '720p', '1080p', 'bluray', 'web-dl'
-    ];
-    
-    fullMovieIndicators.forEach(indicator => {
-      if (name.includes(indicator)) {
-        score += 15;
-      }
-    });
-    
     // Prioritize links with better descriptions
     if (link.name.length > 20) {
       score += 5;
-    }
-    
-    // Bonus for larger file sizes (likely full movies)
-    const sizeMatch = name.match(/(\d+)\s*(mb|gb)/i);
-    if (sizeMatch) {
-      const size = parseInt(sizeMatch[1]);
-      const unit = sizeMatch[2].toLowerCase();
-      const sizeInMB = unit === 'gb' ? size * 1024 : size;
-      
-      if (sizeInMB > 500) {
-        score += 20; // Large files are likely full movies
-      } else if (sizeInMB > 200) {
-        score += 10; // Medium files
-      }
     }
     
     return { ...link, score };
@@ -808,47 +750,6 @@ export async function GET(req: NextRequest) {
     const html = await fetchHtml(fullUrl, siteBase);
 
     const items = extractSubItems(html, urlParam, site);
-
-    // Check if this is a movie page with quality options (for moviesda)
-    if (site === "moviesda" && items.length > 0) {
-      const hasMovieItems = items.some(item => 
-        item.url.includes("-movie/")
-      );
-      
-      console.log('Movie page detection:', { itemsCount: items.length, hasMovieItems, sampleItem: items[0] });
-      
-      // If this looks like a quality selection page, return all quality options
-      if (hasMovieItems) {
-        console.log('Detected movie quality page, returning all quality options');
-        
-        // Group items by quality type for better organization
-        const qualityGroups: { [key: string]: typeof items } = {};
-        
-        for (const item of items) {
-          let qualityType = "Other";
-          
-          if (item.name.includes("1080p")) qualityType = "1080p";
-          else if (item.name.includes("720p")) qualityType = "720p";
-          else if (item.name.includes("360p")) qualityType = "360p";
-          else if (item.name.includes("Original")) qualityType = "Original";
-          else if (item.name.includes("HD")) qualityType = "HD";
-          else if (item.name.includes("4K")) qualityType = "4K";
-          else if (item.name.includes("BluRay")) qualityType = "BluRay";
-          
-          if (!qualityGroups[qualityType]) {
-            qualityGroups[qualityType] = [];
-          }
-          qualityGroups[qualityType].push(item);
-        }
-        
-        // Return organized quality options
-        return NextResponse.json({ 
-          items,
-          qualityGroups,
-          isQualityPage: true
-        });
-      }
-    }
 
     // If items contain download page links, auto-resolve them all
     const downloadItems = items.filter(

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SITES: Record<string, string> = {
-  moviesda: "https://moviesda19.com",
+  moviesda: "https://moviesda18.com",
   isaidub: "https://isaidub.love",
   animesalt: "https://animesalt.ac",
 };
@@ -174,7 +174,7 @@ function usesMoviesdaPathPagination(html: string): boolean {
 
 function isMoviesdaLetterPageUrl(url: string): boolean {
   const cleaned = url.split("?")[0].replace(/\/+$/, "");
-  return /(?:atoz|tamil-movies)\/[a-zA-Z](?:\/\?page=\d+)?$/.test(cleaned);
+  return /(?:atoz|tamil-movies)\/[a-zA-Z](?:\/page\/\d+)?$/.test(cleaned);
 }
 
 function isIsaidubLetterPageUrl(url: string): boolean {
@@ -244,110 +244,16 @@ function extractMoviesFromPage(
   }
   
   // If this is a moviesda letter page, parse movie item links directly before fallback
-  if (site === "moviesda") {
-    // Special handling for Tamil Movies Collection page - extract hero collections
-    if (baseUrl.includes("tamil-movies-collection")) {
-      console.log("Processing Tamil Movies Collection page");
-      console.log(`Base URL: ${baseUrl}`);
-      
-      // Try multiple patterns for hero collections
-      const heroPatterns = [
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]+)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]+)<\/a>/gi,
-        // More generic patterns
-        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
-        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi
-      ];
-      
-      for (const pattern of heroPatterns) {
-        let match: RegExpExecArray | null;
-        while ((match = pattern.exec(html)) !== null) {
-          const href = match[1].trim();
-          const text = match[2].replace(/<[^>]*>/g, "").trim();
-          
-          console.log(`Found hero collection: ${text} -> ${href}`);
-          
-          if (!text || text.length < 3) continue;
-          
-          const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
-          if (!movies.find(m => m.url === normalizedHref)) {
-            movies.push({ title: text, url: normalizedHref });
-          }
-        }
-      }
-      
-      // If still no results, try a more generic approach
-      if (movies.length === 0) {
-        console.log("Trying generic approach for hero collections");
-        const genericPattern = /<a[^>]+href="([^"]*actor-[^"]*movies-collection[^"]*)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi;
-        let match: RegExpExecArray | null;
-        while ((match = genericPattern.exec(html)) !== null) {
-          const href = match[1].trim();
-          const text = match[2].replace(/<[^>]*>/g, "").trim();
-          
-          console.log(`Generic found: ${text} -> ${href}`);
-          
-          if (!text || text.length < 3) continue;
-          
-          const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
-          if (!movies.find(m => m.url === normalizedHref)) {
-            movies.push({ title: text, url: normalizedHref });
-          }
-        }
-      }
-      
-      console.log(`Hero collections found: ${movies.length}`);
-    }
-    
-    // Try to find movie links in the content
-    const moviePatterns = [
-      // Pattern for movie links with year: /movie-name-year-tamil-movie/
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-movie(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Pattern for movie links without year: /movie-name-tamil-movie/
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-tamil-movie(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Pattern for web series: /movie-name-year-tamil-web-series/
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-web-series(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Pattern for movies with -1 suffix: /movie-name-year-tamil-movie-1/
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-\d{4}-tamil-movie-\d+(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Generic pattern for any tamil movie/web-series
-      /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-(?:\d{4}-)?tamil-(?:movie|web-series)(?:-\d+)?(?:\/[^"]*)?)"[^>]*>([\s\S]*?)<\/a>/gi
-    ];
-
-    for (const pattern of moviePatterns) {
-      let match: RegExpExecArray | null;
-      while ((match = pattern.exec(html)) !== null) {
-        const href = match[1].trim();
-        const text = match[2].replace(/<[^>]*>/g, "").trim();
-        
-        if (!text || text.length < 3) continue;
-        if (text.toLowerCase().includes("collection") || text.toLowerCase().includes("download")) continue;
-        if (href.endsWith("/tamil-movies") || href.includes("tamil-movies-collection")) continue;
-        
-        const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
-        if (!movies.find(m => m.url === normalizedHref)) {
-          movies.push({ title: text, url: normalizedHref });
-        }
-      }
-    }
-  }
-
-  // Add fallback for moviesda letter pages - catch any link with movie-like text
-  if (site === "moviesda" && /\/tamil-movies\/[a-zA-Z](?:\/\?page=\d+)?$/.test(baseUrl) && movies.length === 0) {
-    const fallbackPattern = /<a[^>]+href="([^"]+)"[^>]*>([^<]*(?:\(\d{4}\))[^<]*)<\/a>/gi;
-    let m3: RegExpExecArray | null;
-    while ((m3 = fallbackPattern.exec(html)) !== null) {
-      const href = m3[1].trim();
-      const title = m3[2].replace(/<[^>]*>/g, "").trim();
+  if (site === "moviesda" && /\/tamil-movies\/[a-zA-Z](?:\/page\/\d+)?$/.test(baseUrl)) {
+    const movieLinkRegex = /<a[^>]+href="([^"\s]*\/[-a-z0-9]+-(?:movie|moviesda)(?:\/|$))"[^>]*>([\s\S]*?)<\/a>/gi;
+    let m2: RegExpExecArray | null;
+    while ((m2 = movieLinkRegex.exec(html)) !== null) {
+      const href = m2[1].trim();
+      const title = m2[2].replace(/<[^>]*>/g, "").trim();
       const lower = title.toLowerCase();
-      
-      // Check if title looks like a movie (has year and reasonable length)
       if (!title || title.length < 3) continue;
-      if (!/\(\d{4}\)/.test(title)) continue; // Must have year
-      if (lower.includes("collection") || lower.includes("download") || lower.includes("genres") || lower.includes("dubbed")) continue;
-      if (!href.includes("tamil-movie") && !href.includes("tamil-web-series")) continue;
-      
+      if (lower.includes("collection") || lower.includes("download") || lower.includes("web series") || lower.includes("genres") || lower.includes("dubbed")) continue;
+      if (href.endsWith("/tamil-movies") || href.includes("tamil-movies-collection")) continue;
       const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
       if (!movies.find(m => m.url === normalizedHref)) {
         movies.push({ title, url: normalizedHref });
@@ -435,8 +341,6 @@ export async function GET(req: NextRequest) {
   const site = req.nextUrl.searchParams.get("site") || "moviesda";
   const siteBase = SITES[site] || SITES.moviesda;
 
-  console.log(`Category API called: url=${url}, site=${site}`);
-
   if (!url) return NextResponse.json([]);
 
   try {
@@ -461,56 +365,6 @@ export async function GET(req: NextRequest) {
     // Extract movies from first page
     let allMovies = extractMoviesFromPage(firstHtml, fullUrl, site);
     console.log(`First page: ${allMovies.length} movies`);
-    
-    // Special handling for Tamil Movies Collection - extract hero collections directly
-    if (url.includes("tamil-movies-collection")) {
-      console.log("Direct extraction for Tamil Movies Collection");
-      console.log(`HTML snippet: ${firstHtml.substring(0, 500)}`);
-      
-      const heroPatterns = [
-        // Try markdown patterns first
-        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
-        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi,
-        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
-        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi,
-        // Handle both singular and plural
-        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi,
-        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi,
-        // Try HTML patterns
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
-        // Generic patterns
-        /\[([^\]]*Collection)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi
-      ];
-      
-      const heroCollections: { title: string; url: string }[] = [];
-      for (const pattern of heroPatterns) {
-        let match: RegExpExecArray | null;
-        while ((match = pattern.exec(firstHtml)) !== null) {
-          let title = match[1].trim();
-          let href = match[2].trim();
-          
-          // Fix field mapping if they're swapped
-          if (title.startsWith("/actor-") && href.includes("Movies Collection")) {
-            [title, href] = [href, title];
-          }
-          
-          console.log(`Direct found hero: ${title} -> ${href}`);
-          
-          if (!title || title.length < 3) continue;
-          
-          const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
-          if (!heroCollections.find(h => h.url === normalizedHref)) {
-            heroCollections.push({ title, url: normalizedHref });
-          }
-        }
-      }
-      
-      if (heroCollections.length > 0) {
-        console.log(`Found ${heroCollections.length} hero collections directly`);
-        allMovies = heroCollections;
-      }
-    }
 
     // Get pagination info
     const lastPage = getLastPage(firstHtml, site);

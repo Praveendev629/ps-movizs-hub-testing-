@@ -20,8 +20,6 @@ interface MovieDetails {
   items: LinkItem[];
   serverLinks: LinkItem[];
   watchLinks: LinkItem[];
-  qualityGroups?: { [key: string]: LinkItem[] };
-  isQualityPage?: boolean;
 }
 interface WatchState { url: string; name: string }
 
@@ -409,18 +407,6 @@ export default function HomePage() {
     finally { setMoviesLoading(false); }
   }, [site]);
 
-  // Open specific page for hero collections
-  const openCategoryPage = useCallback(async (cat: Category, page: number) => {
-    setSelectedCategory(cat); setMoviesLoading(true); setMovies([]); setSearch("");
-    try {
-      const pageUrl = page > 1 ? `${cat.url}?page=${page}` : cat.url;
-      const res = await fetch(`/api/category?url=${encodeURIComponent(pageUrl)}&site=${site}`);
-      const data = await res.json();
-      setMovies(data);
-    } catch { setMovies([]); }
-    finally { setMoviesLoading(false); }
-  }, [site]);
-
   // Open details modal and fetch details for a given URL
   const openDetails = useCallback(async (name: string, url: string, newBreadcrumb?: BreadEntry[]) => {
     setModalOpen(true);
@@ -465,38 +451,24 @@ export default function HomePage() {
     [movies, search]
   );
 
-  // Simple detection: if movies are single letters (A-Z), show letter buttons
-  const isAlphaList = useMemo(() =>
-    movies.length > 0 && movies.every(m => /^[A-Z]$/.test(m.title)),
-    [movies]
-  );
+  // Detect if category is a "collection" type (shows sub-categories, not movie cards)
+  const isLetterCollection = useMemo(() => {
+    const n = selectedCategory?.name.toLowerCase() || "";
+    return n.includes("a to z") || n.includes("a-z") || n.includes("atoz");
+  }, [selectedCategory]);
 
-  // Simple detection: if URL contains /tamil-movies/ and has movies, show movie grid
-  const isLetterPage = useMemo(() => {
-    const url = selectedCategory?.url?.toLowerCase() || "";
-    return url.includes("/tamil-movies/") && movies.length > 0;
-  }, [selectedCategory, movies]);
-
-  // Year collection detection
   const isYearCollection = useMemo(() => {
     const n = selectedCategory?.name.toLowerCase() || "";
     return n.includes("yearly") || n.includes("year-wise");
   }, [selectedCategory]);
 
-  // Debug logging to help identify the issue
-  useEffect(() => {
-    if (selectedCategory) {
-      console.log('Frontend Debug:', {
-        categoryName: selectedCategory.name,
-        categoryUrl: selectedCategory.url,
-        moviesCount: movies.length,
-        isLetterPage,
-        isYearCollection,
-        isAlphaList,
-        sampleMovies: movies.slice(0, 3)
-      });
-    }
-  }, [selectedCategory, movies, isLetterPage, isYearCollection, isAlphaList]);
+  const isCollectionView = isYearCollection || (isLetterCollection && movies.every(m => /^[A-Z]$/.test(m.title)));
+
+  // When movies are all single-letter (A-Z), show as letter buttons
+  const isAlphaList = useMemo(() =>
+    movies.length > 0 && movies.every(m => /^[A-Z]$/.test(m.title)),
+    [movies]
+  );
 
   // ── Splash ──────────────────────────────────────────────────────────────
   if (splash) {
@@ -630,28 +602,6 @@ export default function HomePage() {
                 <Loader2 className="w-10 h-10 text-red-600 animate-spin" />
                 <p className="text-zinc-500 font-medium">Powering up the p.s movizs engine...</p>
               </div>
-            ) : selectedCategory?.url?.includes("/tamil-movies/") ? (
-              /* FORCE movie grid for all tamil-movies URLs */
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                <AnimatePresence mode="popLayout">
-                  {filteredMovies.map((movie, i) => (
-                    <motion.div key={movie.url} layout
-                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: 0.003 * i }}
-                      onClick={() => openDetails(movie.title, movie.url)}
-                      className="group cursor-pointer">
-                      <div className="relative aspect-[2/3] bg-white/5 rounded-2xl border border-white/5 overflow-hidden group-hover:border-red-600/50 transition-all shadow-xl shadow-black">
-                        <MoviePoster title={movie.title} />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <div className="absolute bottom-0 left-0 right-0 p-3">
-                            <h3 className="text-white font-bold text-xs line-clamp-2 drop-shadow-lg">{movie.title}</h3>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
             ) : isAlphaList ? (
               /* A-Z letter buttons */
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
@@ -662,7 +612,7 @@ export default function HomePage() {
                       exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: 0.01 * i }}
                       onClick={() => {
                         // Opening a letter: load movies for that letter
-                        openCategory({ name: `Letter ${movie.title} - Tamil Movies`, url: movie.url });
+                        openCategory({ name: `${selectedCategory.name} - ${movie.title}`, url: movie.url });
                       }}
                       className="flex items-center justify-center py-8 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
                       <span className="text-2xl font-black text-zinc-300 group-hover:text-red-500 transition-colors">{movie.title}</span>
@@ -670,9 +620,9 @@ export default function HomePage() {
                   ))}
                 </AnimatePresence>
               </div>
-            ) : isYearCollection ? (
-              /* Year collection buttons */
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+            ) : isCollectionView ? (
+              /* Collection/year sub-category buttons */
+              <div className={`grid ${isYearCollection ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"}`}>
                 <AnimatePresence mode="popLayout">
                   {filteredMovies.map((movie, i) => {
                     const yearMatch = movie.title.match(/\d{4}/);
@@ -904,43 +854,42 @@ export default function HomePage() {
                               className="flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
                               <span className="font-semibold text-zinc-300 group-hover:text-white text-sm text-left">{link.name}</span>
                               <div className="w-10 h-10 bg-red-600/10 rounded-xl flex items-center justify-center group-hover:bg-red-600 transition-colors shrink-0 ml-2">
-                            <div key={quality} className="mb-6">
-                              <h4 className="text-lg font-bold text-red-600 mb-3 flex items-center gap-2">
-                                <span className="w-2 h-6 bg-red-600 rounded-full" />
-                                {quality}
-                              </h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {items
-                                  .filter((item: LinkItem) => item.name.toLowerCase().includes(subSearch.toLowerCase()))
-                                  .map((item: LinkItem, i: number) => (
-                                    <button key={i} onClick={() => drillDown(item)}
-                                      className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group text-left">
-                                      <span className="text-sm font-medium text-zinc-400 group-hover:text-white line-clamp-1">{item.name}</span>
-                                      <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-red-600 transition-transform group-hover:translate-x-1 shrink-0" />
-                                    </button>
-                                  ))}
+                                <Download className="w-5 h-5 text-red-600 group-hover:text-white" />
                               </div>
-                            </div>
-                          ))
-                        ) : (
-                          // Render regular items list
-                          details.items
-                            .filter((item: LinkItem) => item.name.toLowerCase().includes(subSearch.toLowerCase()))
-                            .map((item: LinkItem, i: number) => (
+                            </a>
+                          ))}
+                        </>
+                      ) : details.items.length > 0 ? (
+                        <>
+                          <div className="flex items-center gap-2 mb-4">
+                            <Download className="w-4 h-4 text-zinc-500" />
+                            <span className="text-xs font-black uppercase tracking-widest text-zinc-500">
+                              {details.items[0].url.includes("/download/") ? "Download Files" : "Select Quality / Version"}
+                            </span>
+                          </div>
+                          {details.items
+                            .filter(item => item.name.toLowerCase().includes(subSearch.toLowerCase()))
+                            .map((item, i) => (
                               <button key={i} onClick={() => drillDown(item)}
-                                className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group text-left">
-                                <span className="text-sm font-medium text-zinc-400 group-hover:text-white line-clamp-1">{item.name}</span>
+                                className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-red-600/50 rounded-2xl transition-all group">
+                                <span className="text-sm font-medium text-zinc-300 group-hover:text-white text-left">{item.name}</span>
                                 <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-red-600 transition-transform group-hover:translate-x-1 shrink-0" />
                               </button>
-                            ))
-                        )} : (
-                          <div className="py-12 text-center">
-                            <Film className="w-10 h-10 text-zinc-800 mx-auto mb-4" />
-                            <p className="text-zinc-500 text-sm font-medium">No links found</p>
-                            <p className="text-zinc-700 text-xs mt-1">Try navigating back and selecting a different option</p>
-                          </div>
-                        )}
-                      </div>
+                            ))}
+                          {details.items.filter(i => i.name.toLowerCase().includes(subSearch.toLowerCase())).length === 0 && subSearch && (
+                            <div className="py-12 text-center">
+                              <Search className="w-8 h-8 text-zinc-800 mx-auto mb-4" />
+                              <p className="text-zinc-600 text-sm">No results for &quot;{subSearch}&quot;</p>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="py-12 text-center">
+                          <Film className="w-10 h-10 text-zinc-800 mx-auto mb-4" />
+                          <p className="text-zinc-500 text-sm font-medium">No links found</p>
+                          <p className="text-zinc-700 text-xs mt-1">Try navigating back and selecting a different option</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : null}

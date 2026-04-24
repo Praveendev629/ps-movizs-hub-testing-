@@ -904,10 +904,8 @@ export async function GET(req: NextRequest) {
       */
     }
 
-    // DISABLED: Auto-resolution for download items - show quality options to users
-    // Users should choose quality first, then get download/watch options
-    /*
-    // If items contain download page links, auto-resolve them all
+    // Re-enabled: Auto-resolution for download items only (not quality selection)
+    // Users choose quality first, then download items get resolved automatically
     const downloadItems = items.filter(
       (i) =>
         (site === "moviesda" && /^\/download\//.test(i.url)) ||
@@ -961,7 +959,6 @@ export async function GET(req: NextRequest) {
         });
       }
     }
-    */
 
     return NextResponse.json({ items, serverLinks: [], watchLinks: [] });
   } catch (err) {

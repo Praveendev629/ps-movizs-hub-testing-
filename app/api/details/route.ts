@@ -811,13 +811,14 @@ export async function GET(req: NextRequest) {
 
     // Check if this is a movie page with quality options (for moviesda)
     if (site === "moviesda" && items.length > 0) {
-      const hasQualityOptions = items.some(item => 
-        item.url.includes("-movie/") && 
-        (item.name.includes("720p") || item.name.includes("1080p") || item.name.includes("360p") || item.name.includes("HD") || item.name.includes("Original"))
+      const hasMovieItems = items.some(item => 
+        item.url.includes("-movie/")
       );
       
+      console.log('Movie page detection:', { itemsCount: items.length, hasMovieItems, sampleItem: items[0] });
+      
       // If this looks like a quality selection page, auto-resolve the first quality option
-      if (hasQualityOptions) {
+      if (hasMovieItems) {
         console.log('Detected movie quality page, auto-resolving first quality option');
         
         // Find the first quality option (prefer 720p, then 1080p, then Original, then 360p, then HD, then any)

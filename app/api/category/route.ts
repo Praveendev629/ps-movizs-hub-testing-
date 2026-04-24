@@ -466,8 +466,11 @@ export async function GET(req: NextRequest) {
       const heroPatterns = [
         /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
         /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi
+        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
+        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi,
+        // Handle both singular and plural
+        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi,
+        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collection[s]?\/)\)/gi
       ];
       
       const heroCollections: { title: string; url: string }[] = [];

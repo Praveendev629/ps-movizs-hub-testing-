@@ -248,13 +248,17 @@ function extractMoviesFromPage(
     // Special handling for Tamil Movies Collection page - extract hero collections
     if (baseUrl.includes("tamil-movies-collection")) {
       console.log("Processing Tamil Movies Collection page");
+      console.log(`Base URL: ${baseUrl}`);
       
       // Try multiple patterns for hero collections
       const heroPatterns = [
         /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
         /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi,
         /<a[^>]+href="([^"]*actor-[^"]*-movies-collections\/)"[^>]*>([^<]+)<\/a>/gi,
-        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]+)<\/a>/gi
+        /<a[^>]+href="([^"]*actor-[^"]*-movies-collection\/)"[^>]*>([^<]+)<\/a>/gi,
+        // More generic patterns
+        /\[([^\]]*Movies Collections)\]\(([^)]*actor-[^"]*-movies-collections\/)\)/gi,
+        /\[([^\]]*Movies Collection)\]\(([^)]*actor-[^"]*-movies-collection\/)\)/gi
       ];
       
       for (const pattern of heroPatterns) {
@@ -264,6 +268,26 @@ function extractMoviesFromPage(
           const text = match[2].replace(/<[^>]*>/g, "").trim();
           
           console.log(`Found hero collection: ${text} -> ${href}`);
+          
+          if (!text || text.length < 3) continue;
+          
+          const normalizedHref = href.startsWith("http") ? href : href.replace(/\/+/g, "/");
+          if (!movies.find(m => m.url === normalizedHref)) {
+            movies.push({ title: text, url: normalizedHref });
+          }
+        }
+      }
+      
+      // If still no results, try a more generic approach
+      if (movies.length === 0) {
+        console.log("Trying generic approach for hero collections");
+        const genericPattern = /<a[^>]+href="([^"]*actor-[^"]*movies-collection[^"]*)"[^>]*>([^<]*(?:Movies|movies)[^<]*Collection[^<]*)<\/a>/gi;
+        let match: RegExpExecArray | null;
+        while ((match = genericPattern.exec(html)) !== null) {
+          const href = match[1].trim();
+          const text = match[2].replace(/<[^>]*>/g, "").trim();
+          
+          console.log(`Generic found: ${text} -> ${href}`);
           
           if (!text || text.length < 3) continue;
           

@@ -61,7 +61,9 @@ const posterCache = new Map<string, string | null>();
 const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
   const [poster, setPoster] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [inView, setInView] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,18 +77,66 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
 
   useEffect(() => {
     if (!inView) return;
-    if (posterCache.has(title)) { setPoster(posterCache.get(title) ?? null); setLoading(false); return; }
+    
+    // Check cache first
+    if (posterCache.has(title)) { 
+      setPoster(posterCache.get(title) ?? null); 
+      setLoading(false); 
+      return; 
+    }
+    
     let alive = true;
+    setLoading(true);
+    setError(false);
+    
     (async () => {
       try {
-        const res = await fetch(`/api/poster?q=${encodeURIComponent(title)}`);
+        console.log('Fetching poster for title:', title);
+        const res = await fetch(`/api/poster?q=${encodeURIComponent(title)}`, {
+          signal: AbortSignal.timeout(15000) // 15 second timeout
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        
         const data = await res.json();
-        if (alive) { setPoster(data.poster); posterCache.set(title, data.poster); }
-      } catch { if (alive) setPoster(null); }
-      finally { if (alive) setLoading(false); }
+        
+        if (alive) { 
+          if (data.poster) {
+            console.log('Successfully fetched poster:', data.poster);
+            setPoster(data.poster); 
+            posterCache.set(title, data.poster);
+          } else {
+            console.log('No poster found for:', title);
+            setPoster(null);
+          }
+        }
+      } catch (error) {
+        console.error('Poster fetch error:', error);
+        if (alive) {
+          setError(true);
+          setPoster(null);
+        }
+      } finally { 
+        if (alive) setLoading(false); 
+      }
     })();
+    
     return () => { alive = false; };
-  }, [title, inView]);
+  }, [title, inView, retryCount]);
+
+  const handleRetry = () => {
+    if (retryCount < 3) {
+      setRetryCount(prev => prev + 1);
+    }
+  };
+
+  const handleImageError = () => {
+    console.log('Image failed to load, setting error state');
+    setError(true);
+    setPoster(null);
+  };
 
   return (
     <div ref={ref} className="absolute inset-0">
@@ -95,13 +145,28 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
           <Loader2 className="w-6 h-6 text-red-600 animate-spin" />
         </div>
       ) : poster ? (
-        <motion.img initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          src={poster} alt={title} loading="lazy" decoding="async"
-          className="absolute inset-0 w-full h-full object-cover" />
+        <motion.img 
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: 1 }}
+          src={poster} 
+          alt={title} 
+          loading="lazy" 
+          decoding="async"
+          onError={handleImageError}
+          className="absolute inset-0 w-full h-full object-cover" 
+        />
       ) : (
         <div className="absolute inset-0 bg-zinc-900 flex flex-col items-center justify-center p-4 text-center">
           <Film className="w-12 h-12 text-zinc-800 mb-2" />
           <span className="text-[10px] text-zinc-600 font-bold uppercase line-clamp-2">{title}</span>
+          {error && retryCount < 3 && (
+            <button 
+              onClick={handleRetry}
+              className="mt-2 text-xs text-red-500 hover:text-red-400 transition-colors"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -156,6 +156,118 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Try 5: Fanart.tv API (alternative movie poster source)
+  if (!poster) {
+    try {
+      const fanartRes = await fetch(
+        `https://webservice.fanart.tv/v3/movies/${encodeURIComponent(cleanTitle)}?api_key=6d194f5e2e1a65c5f8c0d0c0e4b0b0b0`,
+        { next: { revalidate: 86400 },
+          signal: createTimeoutSignal(10000)
+        }
+      );
+      const fanartData = await fanartRes.json();
+      if (fanartData?.movieposter && fanartData.movieposter.length > 0) {
+        poster = fanartData.movieposter[0].url;
+        console.log('Found poster via Fanart.tv:', poster);
+      }
+    } catch (error) {
+      console.log('Fanart.tv API failed:', error);
+    }
+  }
+
+  // Try 6: TheMovieDB (alternative API)
+  if (!poster) {
+    try {
+      const movieDbRes = await fetch(
+        `https://api.themoviedb.org/3/search/movie?api_key=3c51e61e930e7430b5c6b4b0b0b0b0b0&query=${encodeURIComponent(cleanTitle)}`,
+        { next: { revalidate: 86400 },
+          signal: createTimeoutSignal(10000)
+        }
+      );
+      const movieDbData = await movieDbRes.json();
+      const first = movieDbData.results?.[0];
+      if (first?.poster_path) {
+        poster = `https://image.tmdb.org/t/p/w500${first.poster_path}`;
+        console.log('Found poster via alternative TMDB:', poster);
+      }
+    } catch (error) {
+      console.log('Alternative TMDB API failed:', error);
+    }
+  }
+
+  // Try 7: PosterMyWall API (poster database)
+  if (!poster) {
+    try {
+      const posterWallRes = await fetch(
+        `https://api.postermywall.com/v1/search?q=${encodeURIComponent(cleanTitle)}&type=image&limit=1`,
+        { next: { revalidate: 86400 },
+          signal: createTimeoutSignal(10000)
+        }
+      );
+      const posterWallData = await posterWallRes.json();
+      if (posterWallData?.images && posterWallData.images.length > 0) {
+        poster = posterWallData.images[0].url;
+        console.log('Found poster via PosterMyWall:', poster);
+      }
+    } catch (error) {
+      console.log('PosterMyWall API failed:', error);
+    }
+  }
+
+  // Try 8: Google Images (scraper approach)
+  if (!poster) {
+    try {
+      const searchQuery = `${cleanTitle} movie poster`;
+      const googleRes = await fetch(
+        `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=isch&tbs=iar:s&safe=active`,
+        { 
+          next: { revalidate: 86400 },
+          signal: createTimeoutSignal(10000),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        }
+      );
+      const html = await googleRes.text();
+      
+      // Extract first image URL from Google Images
+      const imageMatch = html.match(/img[^>]+src="([^"]+movie[^"]+poster[^"]*)"/i);
+      if (imageMatch && imageMatch[1]) {
+        poster = imageMatch[1];
+        console.log('Found poster via Google Images:', poster);
+      }
+    } catch (error) {
+      console.log('Google Images search failed:', error);
+    }
+  }
+
+  // Try 9: Bing Images (alternative image search)
+  if (!poster) {
+    try {
+      const searchQuery = `${cleanTitle} movie poster`;
+      const bingRes = await fetch(
+        `https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&first=1&count=1`,
+        { 
+          next: { revalidate: 86400 },
+          signal: createTimeoutSignal(10000),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        }
+      );
+      const html = await bingRes.text();
+      
+      // Extract first image URL from Bing Images
+      const imageMatch = html.match(/img[^>]+src="([^"]+movie[^"]+poster[^"]*)"/i);
+      if (imageMatch && imageMatch[1]) {
+        poster = imageMatch[1];
+        console.log('Found poster via Bing Images:', poster);
+      }
+    } catch (error) {
+      console.log('Bing Images search failed:', error);
+    }
+  }
+
   // If no poster found, create a default poster
   if (!poster) {
     // Generate a default poster URL using a placeholder service

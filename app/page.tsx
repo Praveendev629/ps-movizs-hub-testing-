@@ -114,13 +114,36 @@ function VideoPlayer({ url, title, onClose }: { url: string; title: string; onCl
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [volume, setVolume] = useState(1);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(0.5);
   const [muted, setMuted] = useState(false);
   const [buffering, setBuffering] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [canPlay, setCanPlay] = useState(false);
+
+  // Intelligent preloading and buffering optimization
+  useEffect(() => {
+    if (!videoRef.current || !url) return;
+    
+    const video = videoRef.current;
+    
+    // Start with metadata preload to get video info quickly
+    video.preload = "metadata";
+    
+    // Once metadata is loaded, switch to auto preload for better buffering
+    const handleLoadedMetadata = () => {
+      video.preload = "auto";
+      console.log('Switched to auto preload for better buffering');
+    };
+    
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [url]);
 
   // Block popups and new tabs
   useEffect(() => {
@@ -222,20 +245,36 @@ function VideoPlayer({ url, title, onClose }: { url: string; title: string; onCl
       )}
       <video ref={videoRef} src={url} className="w-full h-full object-contain"
         crossOrigin="anonymous"
-        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        preload="metadata"
+        playsInline
+        controlsList="nodownload"
+        onPlay={() => setPlaying(true)} 
+        onPause={() => setPlaying(false)}
         onTimeUpdate={() => { if (videoRef.current) { setCurrentTime(videoRef.current.currentTime); setProgress(videoRef.current.currentTime / videoRef.current.duration * 100); } }}
         onLoadedData={() => { setBuffering(false); setDuration(videoRef.current?.duration || 0); }}
         onLoadedMetadata={() => { setBuffering(false); setDuration(videoRef.current?.duration || 0); }}
-        onCanPlay={() => { setBuffering(false); }}
+        onCanPlay={() => { setBuffering(false); setCanPlay(true); }}
         onWaiting={() => { setBuffering(true); }}
         onCanPlayThrough={() => { setBuffering(false); }}
+        onProgress={() => {
+          // Check if enough data is buffered to prevent stuttering
+          if (videoRef.current && videoRef.current.buffered.length > 0) {
+            const bufferedEnd = videoRef.current.buffered.end(videoRef.current.buffered.length - 1);
+            const currentTime = videoRef.current.currentTime;
+            // If we have less than 10 seconds buffered, show buffering
+            if (bufferedEnd - currentTime < 10) {
+              setBuffering(true);
+            } else {
+              setBuffering(false);
+            }
+          }
+        }}
         onError={(e) => { 
           setBuffering(false); 
           console.error('Video error:', e);
           toast.error("Stream unavailable. Try downloading instead."); 
         }}
-        onClick={togglePlay} playsInline 
-        controlsList="nodownload" />
+        onClick={togglePlay} />
       <AnimatePresence>
         {showControls && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}

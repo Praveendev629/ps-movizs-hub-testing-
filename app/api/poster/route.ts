@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+const TMDB_API_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJlZWM2ODQzYmIzNmEyNWU5NjMyMDE3NDcyMTlhN2E1ZSIsIm5iZiI6MTc3NzEwMjQ0NS44ODksInN1YiI6IjY5ZWM2ZTZkMmRlNGU2N2FlYjI4ZDJjNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.1-GGbq6qKfuyKxAPUDstsoSKd_ybv12hwzniRXi1NMg";
 
 // Simple in-memory cache for better performance
 const posterCache = new Map<string, { data: any; timestamp: number }>();
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
     .replace(/\b(HD|HQ|DVDRip|BluRay|WEBRip|CAM|1080p|720p|480p|360p|4K|2K)\b/gi, "") // Remove quality
     .replace(/\b(moviesda|isaidub|tamilrockers|tamilmv|movierulz|filmyzilla)\b/gi, "") // Remove site names
     .replace(/\.(mp4|mkv|avi|mov|webm)$/gi, "") // Remove file extensions
-    .replace(/[^\w\s]/gi, " ") // Remove special chars
+   .replace(/[^\w\s:-]/gi, " ")// Remove special chars
     .replace(/\s+/g, " ")
     .trim();
 
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   // Try TMDB API if key is available, otherwise skip to OMDB
   try {
-    const tmdbKey = process.env.TMDB_API_KEY;
+   const tmdbKey = TMDB_API_KEY;
     if (tmdbKey) {
       console.log('Searching TMDB for:', cleanTitle);
       

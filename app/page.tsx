@@ -64,44 +64,66 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
   const [inView, setInView] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // 👁️ Lazy load using intersection observer
   useEffect(() => {
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setInView(true); observer.disconnect(); } },
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
       { rootMargin: "200px" }
     );
+
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
 
+  // 🎬 Fetch poster
   useEffect(() => {
     if (!inView) return;
-    if (posterCache.has(title)) { setPoster(posterCache.get(title) ?? null); setLoading(false); return; }
+
+    // ✅ Cache check
+    if (posterCache.has(title)) {
+      setPoster(posterCache.get(title) ?? null);
+      setLoading(false);
+      return;
+    }
+
     let alive = true;
+
     (async () => {
       try {
-        console.log('Fetching poster for:', title);
-        const res = await fetch(`/api/poster?q=${encodeURIComponent(title)}`);
+        const res = await fetch(`/api/poster?q=${encodeURIComponent(title)}`, {
+          cache: "force-cache",
+        });
+
         const data = await res.json();
-        console.log('Poster API response:', data);
-        
-        if (alive) { 
-          setPoster(data.poster); 
-          posterCache.set(title, data.poster);
-          
-          // Log success or failure for debugging
-          if (data.poster) {
-            console.log('Successfully loaded poster for:', title);
-          } else {
-            console.log('No poster found for:', title);
-          }
+
+        if (process.env.NODE_ENV === "development") {
+          console.log("Poster:", title, data?.poster);
+        }
+
+        if (alive) {
+          const posterUrl = data?.poster || null;
+
+          setPoster(posterUrl);
+          posterCache.set(title, posterUrl);
         }
       } catch (error) {
-        console.error('Error fetching poster for', title, ':', error);
+        if (process.env.NODE_ENV === "development") {
+          console.error("Poster error:", title, error);
+        }
         if (alive) setPoster(null);
+      } finally {
+        if (alive) setLoading(false);
       }
-      finally { if (alive) setLoading(false); }
     })();
-    return () => { alive = false; };
+
+    return () => {
+      alive = false;
+    };
   }, [title, inView]);
 
   return (
@@ -111,20 +133,28 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
           <Loader2 className="w-6 h-6 text-red-600 animate-spin" />
         </div>
       ) : poster ? (
-        <motion.img initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          src={poster} alt={title} loading="lazy" decoding="async"
-          className="absolute inset-0 w-full h-full object-cover" />
+        <motion.img
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          src={poster}
+          alt={title}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
       ) : (
-        <div className="absolute inset-0 bg-zinc-900 flex flex-col items-center justify-center p-4 text-center">
-          <Film className="w-12 h-12 text-zinc-800 mb-2" />
-          <span className="text-[10px] text-zinc-600 font-bold uppercase line-clamp-2">{title}</span>
-          <span className="text-[8px] text-zinc-700 mt-1">No Poster Available</span>
-        </div>
+        // ✅ Always show fallback image
+        <img
+          src={`https://via.placeholder.com/300x450/111/ff0000?text=${encodeURIComponent(
+            title
+          )}`}
+          alt={title}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
       )}
     </div>
   );
 });
-
 // ── VideoPlayer ────────────────────────────────────────────────────────────
 function VideoPlayer({ url, title, onClose }: { url: string; title: string; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);

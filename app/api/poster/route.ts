@@ -21,8 +21,51 @@ function cleanMovieTitle(title: string): string {
     .replace(/\(.*?\)/g, "") // Remove parentheses content (except years)
     .replace(/\.(mp4|mkv|avi|mov|webm|m4v)$/gi, "") // Remove file extensions
     .replace(/\b(Moviesda|Mobi|com|www)\b/gi, "") // Remove site names
+    .replace(/\b(Tamil|Dubbed|Hindi|Malayalam|Telugu|Kannada)\b/gi, "") // Remove language indicators
     .replace(/\s+/g, " ") // Normalize spaces
     .trim();
+}
+
+// Function to calculate title similarity
+function calculateTitleSimilarity(title1: string, title2: string): number {
+  const words1 = title1.toLowerCase().split(' ').filter(w => w.length > 2);
+  const words2 = title2.toLowerCase().split(' ').filter(w => w.length > 2);
+  
+  let matches = 0;
+  for (const word1 of words1) {
+    for (const word2 of words2) {
+      if (word1 === word2 || word1.includes(word2) || word2.includes(word1)) {
+        matches++;
+        break;
+      }
+    }
+  }
+  
+  const maxWords = Math.max(words1.length, words2.length);
+  return maxWords > 0 ? matches / maxWords : 0;
+}
+
+// Function to validate if poster is likely correct
+function isValidPoster(posterUrl: string, movieTitle: string): boolean {
+  // Check if URL contains movie-related keywords
+  const movieKeywords = ['poster', 'movie', 'film', 'cinema', 'cover'];
+  const hasMovieKeyword = movieKeywords.some(keyword => 
+    posterUrl.toLowerCase().includes(keyword)
+  );
+  
+  // Check if URL contains title words
+  const titleWords = movieTitle.toLowerCase().split(' ').filter(w => w.length > 3);
+  const hasTitleWords = titleWords.some(word => 
+    posterUrl.toLowerCase().includes(word)
+  );
+  
+  // Check for common image extensions
+  const validExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+  const hasValidExtension = validExtensions.some(ext => 
+    posterUrl.toLowerCase().includes(ext)
+  );
+  
+  return hasMovieKeyword || hasTitleWords || hasValidExtension;
 }
 
 function extractYearFromTitle(title: string): number | null {
@@ -60,9 +103,13 @@ export async function GET(req: NextRequest) {
     });
     const omdbData = await omdbRes.json();
     
-    if (omdbData.Poster && omdbData.Poster !== "N/A") {
-      poster = omdbData.Poster;
-      console.log('Found poster via OMDB:', poster);
+    if (omdbData.Poster && omdbData.Poster !== "N/A" && isValidPoster(omdbData.Poster, cleanTitle)) {
+      // Check title similarity for accuracy
+      const similarity = calculateTitleSimilarity(cleanTitle, omdbData.Title || '');
+      if (similarity >= 0.5 || !year) { // Accept if good match or no year specified
+        poster = omdbData.Poster;
+        console.log('Found poster via OMDB (similarity:', similarity, ')', poster);
+      }
     }
   } catch (error) {
     console.log('OMDB API failed:', error);
@@ -83,18 +130,29 @@ export async function GET(req: NextRequest) {
         });
         const tmdbData = await tmdbRes.json();
         
-        // Find the best match by year if available
+        // Find the best match by year and title similarity
         let bestMatch = tmdbData.results?.[0];
-        if (year && tmdbData.results?.length > 1) {
-          bestMatch = tmdbData.results.find((movie: any) => {
+        if (tmdbData.results?.length > 0) {
+          bestMatch = tmdbData.results.reduce((best: any, movie: any) => {
             const movieYear = new Date(movie.release_date).getFullYear();
-            return Math.abs(movieYear - year) <= 1; // Allow 1 year difference
-          }) || tmdbData.results[0];
+            const yearMatch = !year || Math.abs(movieYear - year) <= 1;
+            const similarity = calculateTitleSimilarity(cleanTitle, movie.title);
+            const bestSimilarity = calculateTitleSimilarity(cleanTitle, best.title);
+            
+            // Score based on year match and title similarity
+            const movieScore = (yearMatch ? 0.5 : 0) + similarity;
+            const bestScore = (yearMatch ? 0.5 : 0) + bestSimilarity;
+            
+            return movieScore > bestScore ? movie : best;
+          });
         }
         
         if (bestMatch?.poster_path) {
-          poster = `https://image.tmdb.org/t/p/w500${bestMatch.poster_path}`;
-          console.log('Found poster via TMDB:', poster);
+          const similarity = calculateTitleSimilarity(cleanTitle, bestMatch.title);
+          if (similarity >= 0.4) { // Accept if reasonable match
+            poster = `https://image.tmdb.org/t/p/w500${bestMatch.poster_path}`;
+            console.log('Found poster via TMDB (similarity:', similarity, ')', poster);
+          }
         }
       }
     } catch (error) {
@@ -217,7 +275,7 @@ export async function GET(req: NextRequest) {
   // Try 8: Google Images (scraper approach)
   if (!poster) {
     try {
-      const searchQuery = `${cleanTitle} movie poster`;
+      const searchQuery = `${cleanTitle} movie poster official`;
       const googleRes = await fetch(
         `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}&tbm=isch&tbs=iar:s&safe=active`,
         { 
@@ -230,11 +288,37 @@ export async function GET(req: NextRequest) {
       );
       const html = await googleRes.text();
       
-      // Extract first image URL from Google Images
-      const imageMatch = html.match(/img[^>]+src="([^"]+movie[^"]+poster[^"]*)"/i);
-      if (imageMatch && imageMatch[1]) {
-        poster = imageMatch[1];
-        console.log('Found poster via Google Images:', poster);
+      // Extract multiple image URLs and find the best match
+      const imageMatches = html.matchAll(/img[^>]+src="([^"]+)"/gi);
+      let bestPoster = null;
+      let bestScore = 0;
+      
+      for (const match of imageMatches) {
+        const imageUrl = match[1];
+        if (isValidPoster(imageUrl, cleanTitle)) {
+          // Score based on URL relevance
+          let score = 0;
+          if (imageUrl.includes('poster')) score += 0.3;
+          if (imageUrl.includes('movie')) score += 0.2;
+          if (imageUrl.includes('official')) score += 0.2;
+          
+          const titleWords = cleanTitle.toLowerCase().split(' ').filter(w => w.length > 3);
+          for (const word of titleWords) {
+            if (imageUrl.toLowerCase().includes(word)) {
+              score += 0.1;
+            }
+          }
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestPoster = imageUrl;
+          }
+        }
+      }
+      
+      if (bestPoster && bestScore >= 0.3) {
+        poster = bestPoster;
+        console.log('Found poster via Google Images (score:', bestScore, ')', poster);
       }
     } catch (error) {
       console.log('Google Images search failed:', error);
@@ -244,9 +328,9 @@ export async function GET(req: NextRequest) {
   // Try 9: Bing Images (alternative image search)
   if (!poster) {
     try {
-      const searchQuery = `${cleanTitle} movie poster`;
+      const searchQuery = `${cleanTitle} movie poster official`;
       const bingRes = await fetch(
-        `https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&first=1&count=1`,
+        `https://www.bing.com/images/search?q=${encodeURIComponent(searchQuery)}&first=1&count=20`,
         { 
           next: { revalidate: 86400 },
           signal: createTimeoutSignal(10000),
@@ -257,11 +341,37 @@ export async function GET(req: NextRequest) {
       );
       const html = await bingRes.text();
       
-      // Extract first image URL from Bing Images
-      const imageMatch = html.match(/img[^>]+src="([^"]+movie[^"]+poster[^"]*)"/i);
-      if (imageMatch && imageMatch[1]) {
-        poster = imageMatch[1];
-        console.log('Found poster via Bing Images:', poster);
+      // Extract multiple image URLs and find the best match
+      const imageMatches = html.matchAll(/img[^>]+src="([^"]+)"/gi);
+      let bestPoster = null;
+      let bestScore = 0;
+      
+      for (const match of imageMatches) {
+        const imageUrl = match[1];
+        if (isValidPoster(imageUrl, cleanTitle)) {
+          // Score based on URL relevance
+          let score = 0;
+          if (imageUrl.includes('poster')) score += 0.3;
+          if (imageUrl.includes('movie')) score += 0.2;
+          if (imageUrl.includes('official')) score += 0.2;
+          
+          const titleWords = cleanTitle.toLowerCase().split(' ').filter(w => w.length > 3);
+          for (const word of titleWords) {
+            if (imageUrl.toLowerCase().includes(word)) {
+              score += 0.1;
+            }
+          }
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestPoster = imageUrl;
+          }
+        }
+      }
+      
+      if (bestPoster && bestScore >= 0.3) {
+        poster = bestPoster;
+        console.log('Found poster via Bing Images (score:', bestScore, ')', poster);
       }
     } catch (error) {
       console.log('Bing Images search failed:', error);

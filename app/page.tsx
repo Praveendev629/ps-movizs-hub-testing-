@@ -79,10 +79,26 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
     let alive = true;
     (async () => {
       try {
+        console.log('Fetching poster for:', title);
         const res = await fetch(`/api/poster?q=${encodeURIComponent(title)}`);
         const data = await res.json();
-        if (alive) { setPoster(data.poster); posterCache.set(title, data.poster); }
-      } catch { if (alive) setPoster(null); }
+        console.log('Poster API response:', data);
+        
+        if (alive) { 
+          setPoster(data.poster); 
+          posterCache.set(title, data.poster);
+          
+          // Log success or failure for debugging
+          if (data.poster) {
+            console.log('Successfully loaded poster for:', title);
+          } else {
+            console.log('No poster found for:', title);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching poster for', title, ':', error);
+        if (alive) setPoster(null);
+      }
       finally { if (alive) setLoading(false); }
     })();
     return () => { alive = false; };
@@ -102,6 +118,7 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
         <div className="absolute inset-0 bg-zinc-900 flex flex-col items-center justify-center p-4 text-center">
           <Film className="w-12 h-12 text-zinc-800 mb-2" />
           <span className="text-[10px] text-zinc-600 font-bold uppercase line-clamp-2">{title}</span>
+          <span className="text-[8px] text-zinc-700 mt-1">No Poster Available</span>
         </div>
       )}
     </div>

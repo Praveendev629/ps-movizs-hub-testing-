@@ -1,106 +1,169 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Simple in-memory cache for better performance
+const posterCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q") || "";
   if (!q) return NextResponse.json({ poster: null });
 
-  // Enhanced movie title cleaning for better TMDB search
+  // Check cache first
+  const cacheKey = q.toLowerCase().trim();
+  const cached = posterCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log('Returning cached poster for:', q);
+    return NextResponse.json(cached.data);
+  }
+
+  // Fast and efficient title cleaning
   const cleanTitle = q
-    // Remove year in parentheses
-    .replace(/\(\d{4}\)/g, "")
-    // Remove standalone years
-    .replace(/\b\d{4}\b/g, "")
-    // Remove quality indicators
-    .replace(/\b(HD|HQ|DVDRip|BluRay|WEBRip|CAM|TS|TC|1080p|720p|480p|360p|4K|2K)\b/gi, "")
-    // Remove source/site names
-    .replace(/\b(moviesda|isaidub|tamilrockers|tamilmv|tamilblasters|movierulz|filmyzilla|filmywap|9xmovies|bolly4u|mkvhub|hdhub4u|dotmovies|moviesflix|moviesverse|moviesnation|moviescounter|moviesbaba|moviesda|moviesflix|moviesverse|moviesnation|moviescounter|moviesbaba)\b/gi, "")
-    // Remove file extensions
-    .replace(/\.(mp4|mkv|avi|mov|webm|flv|wmv|m4v|3gp)$/gi, "")
-    // Remove common tags
-    .replace(/\b(Original|Uncut|Extended|Director\'s Cut|Theatrical|Unrated|Remastered|Restored|Criterion|Special|Edition|Version|Cut)\b/gi, "")
-    // Remove special characters and extra spaces
-    .replace(/[^\w\s]/gi, " ")
+    .replace(/\(\d{4}\)/g, "") // Remove years in parentheses
+    .replace(/\b\d{4}\b/g, "") // Remove standalone years
+    .replace(/\b(HD|HQ|DVDRip|BluRay|WEBRip|CAM|1080p|720p|480p|360p|4K|2K)\b/gi, "") // Remove quality
+    .replace(/\b(moviesda|isaidub|tamilrockers|tamilmv|movierulz|filmyzilla)\b/gi, "") // Remove site names
+    .replace(/\.(mp4|mkv|avi|mov|webm)$/gi, "") // Remove file extensions
+    .replace(/[^\w\s]/gi, " ") // Remove special chars
     .replace(/\s+/g, " ")
     .trim();
 
-  console.log('Original title:', q);
-  console.log('Cleaned title for TMDB:', cleanTitle);
+  console.log('Original:', q, '-> Cleaned:', cleanTitle);
 
-  // Prioritize TMDB API for better results
+  // Try TMDB API if key is available, otherwise skip to OMDB
   try {
     const tmdbKey = process.env.TMDB_API_KEY;
     if (tmdbKey) {
       console.log('Searching TMDB for:', cleanTitle);
       
-      // First try exact search
-      let tmdbRes = await fetch(
-        `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(cleanTitle)}&api_key=${tmdbKey}&language=en-US&page=1&include_adult=false`,
-        { 
-          next: { revalidate: 86400 },
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
+      // Fast TMDB API call with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      try {
+        let tmdbRes = await fetch(
+          `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(cleanTitle)}&api_key=${tmdbKey}&language=en-US&page=1&include_adult=false`,
+          { 
+            next: { revalidate: 86400 },
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            signal: controller.signal
+          }
+        );
+        
+        clearTimeout(timeoutId);
+        
+        if (!tmdbRes.ok) {
+          throw new Error(`TMDB API error: ${tmdbRes.status}`);
+        }
+        
+        let tmdbData = await tmdbRes.json();
+        console.log('TMDB found:', tmdbData.results?.length || 0, 'movies');
+        
+        // If no results, try partial title
+        if (!tmdbData.results?.length && cleanTitle.split(' ').length > 3) {
+          const partialTitle = cleanTitle.split(' ').slice(0, 3).join(' ');
+          console.log('Trying partial:', partialTitle);
+          
+          const partialController = new AbortController();
+          const partialTimeoutId = setTimeout(() => partialController.abort(), 3000);
+          
+          try {
+            tmdbRes = await fetch(
+              `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(partialTitle)}&api_key=${tmdbKey}&language=en-US&page=1&include_adult=false`,
+              { 
+                next: { revalidate: 86400 },
+                signal: partialController.signal
+              }
+            );
+            
+            clearTimeout(partialTimeoutId);
+            tmdbData = await tmdbRes.json();
+            console.log('TMDB partial found:', tmdbData.results?.length || 0, 'movies');
+          } catch (partialError) {
+            clearTimeout(partialTimeoutId);
+            console.log('Partial search failed, using original results');
           }
         }
-      );
-      
-      let tmdbData = await tmdbRes.json();
-      console.log('TMDB search results:', tmdbData.results?.length || 0, 'movies found');
-      
-      // If no results, try with partial title (first 3 words)
-      if (!tmdbData.results?.length && cleanTitle.split(' ').length > 3) {
-        const partialTitle = cleanTitle.split(' ').slice(0, 3).join(' ');
-        console.log('Trying partial title:', partialTitle);
         
-        tmdbRes = await fetch(
-          `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(partialTitle)}&api_key=${tmdbKey}&language=en-US&page=1&include_adult=false`,
-          { next: { revalidate: 86400 } }
-        );
-        tmdbData = await tmdbRes.json();
-        console.log('TMDB partial search results:', tmdbData.results?.length || 0, 'movies found');
-      }
-      
-      // Get the first result with poster
-      const movieWithPoster = tmdbData.results?.find((movie: any) => movie.poster_path);
-      
-      if (movieWithPoster?.poster_path) {
-        const posterUrl = `https://image.tmdb.org/t/p/w500${movieWithPoster.poster_path}`;
-        console.log('Found TMDB poster:', posterUrl);
-        console.log('Movie details:', movieWithPoster.title, movieWithPoster.release_date);
+        // Get the first result with poster
+        const movieWithPoster = tmdbData.results?.find((movie: any) => movie.poster_path);
         
-        return NextResponse.json({ 
-          poster: posterUrl,
-          title: movieWithPoster.title,
-          year: movieWithPoster.release_date?.split('-')[0],
-          id: movieWithPoster.id
-        });
-      } else {
-        console.log('No poster found in TMDB results');
+        if (movieWithPoster?.poster_path) {
+          const posterUrl = `https://image.tmdb.org/t/p/w500${movieWithPoster.poster_path}`;
+          console.log('Found TMDB poster:', posterUrl);
+          
+          const result = { 
+            poster: posterUrl,
+            title: movieWithPoster.title,
+            year: movieWithPoster.release_date?.split('-')[0],
+            id: movieWithPoster.id
+          };
+          
+          // Cache the result
+          posterCache.set(cacheKey, { data: result, timestamp: Date.now() });
+          
+          return NextResponse.json(result);
+        } else {
+          console.log('No poster in TMDB results');
+        }
+      } catch (tmdbError) {
+        clearTimeout(timeoutId);
+        console.error('TMDB API failed:', tmdbError);
       }
     } else {
-      console.log('TMDB API key not found in environment');
+      console.log('TMDB API key not found, using OMDB fallback');
     }
   } catch (error) {
-    console.error('TMDB API error:', error);
+    console.error('TMDB setup error:', error);
   }
 
   // Fallback to OMDB if TMDB fails
   try {
     console.log('Trying OMDB fallback for:', cleanTitle);
-    const omdbRes = await fetch(
-      `https://www.omdbapi.com/?t=${encodeURIComponent(cleanTitle)}&type=movie&apikey=trilogy`,
-      { next: { revalidate: 86400 } }
-    );
-    const omdbData = await omdbRes.json();
+    const omdbController = new AbortController();
+    const omdbTimeoutId = setTimeout(() => omdbController.abort(), 3000);
     
-    if (omdbData.Poster && omdbData.Poster !== "N/A") {
-      console.log('Found OMDB poster:', omdbData.Poster);
-      return NextResponse.json({ poster: omdbData.Poster });
+    try {
+      const omdbRes = await fetch(
+        `https://www.omdbapi.com/?t=${encodeURIComponent(cleanTitle)}&type=movie&apikey=trilogy`,
+        { 
+          next: { revalidate: 86400 },
+          signal: omdbController.signal
+        }
+      );
+      
+      clearTimeout(omdbTimeoutId);
+      
+      if (omdbRes.ok) {
+        const omdbData = await omdbRes.json();
+        
+        if (omdbData.Poster && omdbData.Poster !== "N/A") {
+          console.log('Found OMDB poster:', omdbData.Poster);
+          
+          const result = { poster: omdbData.Poster };
+          posterCache.set(cacheKey, { data: result, timestamp: Date.now() });
+          
+          return NextResponse.json(result);
+        }
+      }
+    } catch (omdbError) {
+      clearTimeout(omdbTimeoutId);
+      console.log('OMDB API failed, using fallback');
     }
   } catch (error) {
-    console.error('OMDB API error:', error);
+    console.error('OMDB setup error:', error);
   }
 
-  console.log('No poster found for:', q);
-  return NextResponse.json({ poster: null });
+  // Generate fallback poster
+  const posterTitle = cleanTitle || q;
+  const fallbackPoster = `https://via.placeholder.com/500x750/1a1a1a/ff0000?text=${encodeURIComponent(posterTitle.replace(/\s+/g, '+'))}`;
+  
+  console.log('Using fallback poster for:', q);
+  
+  const result = { poster: fallbackPoster };
+  posterCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  
+  return NextResponse.json(result);
 }

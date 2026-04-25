@@ -4,6 +4,13 @@ import { NextRequest, NextResponse } from "next/server";
 const posterCache = new Map<string, { poster: string | null; timestamp: number }>();
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
+// Timeout helper for Node.js compatibility
+function createTimeoutSignal(timeoutMs: number) {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
 function cleanMovieTitle(title: string): string {
   return title
     .replace(/\(\d{4}\)/g, "") // Remove years in parentheses
@@ -49,7 +56,7 @@ export async function GET(req: NextRequest) {
     
     const omdbRes = await fetch(omdbUrl, { 
       next: { revalidate: 86400 },
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      signal: createTimeoutSignal(10000) // 10 second timeout
     });
     const omdbData = await omdbRes.json();
     
@@ -72,7 +79,7 @@ export async function GET(req: NextRequest) {
         
         const tmdbRes = await fetch(tmdbUrl, { 
           next: { revalidate: 86400 },
-          signal: AbortSignal.timeout(10000)
+          signal: createTimeoutSignal(10000)
         });
         const tmdbData = await tmdbRes.json();
         
@@ -101,7 +108,7 @@ export async function GET(req: NextRequest) {
       const omdbRes = await fetch(
         `https://www.omdbapi.com/?s=${encodeURIComponent(cleanTitle)}&type=movie&apikey=trilogy`,
         { next: { revalidate: 86400 },
-          signal: AbortSignal.timeout(10000)
+          signal: createTimeoutSignal(10000)
         }
       );
       const omdbData = await omdbRes.json();
@@ -134,7 +141,7 @@ export async function GET(req: NextRequest) {
         const tmdbRes = await fetch(
           `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(cleanTitle.split(' ')[0])}&api_key=${tmdbKey}`,
           { next: { revalidate: 86400 },
-            signal: AbortSignal.timeout(10000)
+            signal: createTimeoutSignal(10000)
           }
         );
         const tmdbData = await tmdbRes.json();
@@ -147,6 +154,14 @@ export async function GET(req: NextRequest) {
     } catch (error) {
       console.log('Partial TMDB search failed:', error);
     }
+  }
+
+  // If no poster found, create a default poster
+  if (!poster) {
+    // Generate a default poster URL using a placeholder service
+    const posterText = encodeURIComponent(cleanTitle || q);
+    poster = `https://via.placeholder.com/300x450/1f2937/ffffff?text=${posterText}`;
+    console.log('Generated default poster:', poster);
   }
 
   // Cache the result

@@ -26,6 +26,13 @@ interface WatchState { url: string; name: string }
 // Breadcrumb stack entry
 interface BreadEntry { name: string; url: string }
 
+// Timeout helper for Node.js compatibility
+function createTimeoutSignal(timeoutMs: number) {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
 // Helper function to check if URL needs proxy
 function needsProxy(url: string): boolean {
   if (!url.startsWith('http')) return false;
@@ -93,7 +100,7 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
       try {
         console.log('Fetching poster for title:', title);
         const res = await fetch(`/api/poster?q=${encodeURIComponent(title)}`, {
-          signal: AbortSignal.timeout(15000) // 15 second timeout
+          signal: createTimeoutSignal(15000) // 15 second timeout
         });
         
         if (!res.ok) {
@@ -156,9 +163,9 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
           className="absolute inset-0 w-full h-full object-cover" 
         />
       ) : (
-        <div className="absolute inset-0 bg-zinc-900 flex flex-col items-center justify-center p-4 text-center">
-          <Film className="w-12 h-12 text-zinc-800 mb-2" />
-          <span className="text-[10px] text-zinc-600 font-bold uppercase line-clamp-2">{title}</span>
+        <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-800 flex flex-col items-center justify-center p-4 text-center">
+          <Film className="w-12 h-12 text-zinc-700 mb-2" />
+          <span className="text-[10px] text-zinc-500 font-bold uppercase line-clamp-2">{title}</span>
           {error && retryCount < 3 && (
             <button 
               onClick={handleRetry}
@@ -167,6 +174,8 @@ const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
               Retry
             </button>
           )}
+          {/* Always show a visual element */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
         </div>
       )}
     </div>

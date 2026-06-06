@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SITES: Record<string, string> = {
-  moviesda: "https://moviesda18.com",
-  isaidub: "https://isaidub.love",
+  moviesda: "https://moviesda31.com",
+  isaidub: "https://isaidub.guru",
   animesalt: "https://animesalt.ac",
 };
    
@@ -22,14 +22,13 @@ async function fetchHtml(url: string, referer?: string): Promise<string> {
 
 function extractHrefLinks(
   html: string,
-  pattern: RegExp,
-  fallbackName = ""
+  pattern: RegExp
 ): { name: string; url: string }[] {
   const links: { name: string; url: string }[] = [];
   let m: RegExpExecArray | null;
   while ((m = pattern.exec(html)) !== null) {
     const url = m[1];
-    const name = (m[2] || fallbackName).replace(/<[^>]+>/g, "").trim();
+    const name = (m[2] || "").replace(/<[^>]+>/g, "").trim();
     if (url && name && !links.find((l) => l.url === url)) {
       links.push({ name, url });
     }
@@ -37,76 +36,10 @@ function extractHrefLinks(
   return links;
 }
 
-function dedupeLinks(links: { name: string; url: string }[]) {
-  const seen = new Map<string, { name: string; url: string }>();
-  const deduped: { name: string; url: string }[] = [];
-  
-  for (const link of links) {
-    // Normalize URL for comparison (remove trailing slashes, lowercase)
-    const normalizedUrl = link.url.replace(/\/$/, '').toLowerCase();
-    
-    if (!seen.has(normalizedUrl)) {
-      seen.set(normalizedUrl, link);
-      deduped.push(link);
-    } else {
-      // Keep the more descriptive name if available
-      const existing = seen.get(normalizedUrl)!;
-      if (link.name.length > existing.name.length && !link.name.includes('Direct stream')) {
-        existing.name = link.name;
-      }
-    }
-  }
-  
-  return deduped;
-}
-
-function prioritizeAndLimitLinks(links: { name: string; url: string }[], limit: number = 2) {
-  // Priority scoring system
-  const scoredLinks = links.map(link => {
-    let score = 0;
-    const name = link.name.toLowerCase();
-    const url = link.url.toLowerCase();
-    
-    // Prioritize onestream.today links
-    if (url.includes('onestream.today')) {
-      score += 100;
-      if (url.includes('play.onestream.today')) {
-        score += 50; // Extra priority for play.onestream.today
-      }
-    }
-    
-    // Prioritize links with "Watch Online" in name
-    if (name.includes('watch online')) {
-      score += 30;
-    }
-    
-    // Prioritize "Server 1" over higher numbers
-    if (name.includes('server 1')) {
-      score += 20;
-    }
-    
-    // Penalize "Direct stream" links
-    if (name.includes('direct stream')) {
-      score -= 10;
-    }
-    
-    // Prioritize links with better descriptions
-    if (link.name.length > 20) {
-      score += 5;
-    }
-    
-    return { ...link, score };
-  });
-  
-  // Sort by score (descending) and take top links
-  scoredLinks.sort((a, b) => b.score - a.score);
-  
-  return scoredLinks.slice(0, limit).map(({ score, ...link }) => link);
-}
-
 /**
- * Moviesda download chain:
- * /download/slug/ → download.moviespage.xyz/download/file/ID → movies.downloadpage.xyz/download/page/ID → CDN links
+ * Moviesda31.com download chain:
+ * /download/slug/ → download.moviespage.xyz/download/file/ID → movies.downloadpage.xyz/download/page/ID
+ * Final page has: CDN links + play.onestream.today/stream/page/ID watch links
  */
 async function resolveMoviesdaChain(
   pageUrl: string,
@@ -119,71 +52,6 @@ async function resolveMoviesdaChain(
     ? pageUrl
     : `${siteBase}${pageUrl}`;
   const html1 = await fetchHtml(fullUrl, siteBase);
-
-  // Check if this is already a movies.downloadpage.xyz URL (step 2)
-  if (fullUrl.includes('movies.downloadpage.xyz')) {
-    console.log('Direct movies.downloadpage.xyz URL detected, skipping to step 2');
-    // This is already step 2, so we can process it directly
-    const step2 = extractHrefLinks(
-      html1,
-      /href="(https?:\/\/dubmv\.top\/download\/file\/\d+)"[^>]*>([^<]+)/gi
-    );
-    
-    let html3 = "";
-    if (step2.length > 0) {
-      html3 = await fetchHtml(step2[0].url, fullUrl);
-    } else {
-      html3 = html1;
-    }
-    
-    // Extract CDN download links
-    const dlLinks = extractHrefLinks(
-      html3,
-      /href="(https?:\/\/s\d+\.cdnserver\d+\.xyz[^"]+)"[^>]*>([^<]*(?:Download|Server)[^<]*)/gi
-    );
-
-    // Extract watch links - look for onestream.today links
-    let watchLinks = extractHrefLinks(
-      html3,
-      /href="(https?:\/\/play\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-    );
-
-    // Also try alternative pattern for onestream
-    if (watchLinks.length === 0) {
-      watchLinks = extractHrefLinks(
-        html3,
-        /href="(https?:\/\/stream\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-      );
-    }
-
-    // General pattern for any onestream.today link
-    if (watchLinks.length === 0) {
-      watchLinks = extractHrefLinks(
-        html3,
-        /href="(https?:\/\/[^"]*onestream\.today\/[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-      );
-    }
-
-    console.log('Direct movies.downloadpage.xyz - Found watch links:', watchLinks.length);
-    watchLinks.forEach((link, i) => {
-      console.log(`  ${i + 1}. ${link.name}: ${link.url}`);
-    });
-
-    // Resolve onestream links
-    const resolvedLinks = [];
-    for (const link of watchLinks) {
-      if (link.url.includes('onestream.today')) {
-        resolvedLinks.push({
-          name: link.name,
-          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
-        });
-      } else {
-        resolvedLinks.push(link);
-      }
-    }
-
-    return { serverLinks: dlLinks, watchLinks: resolvedLinks };
-  }
 
   // Step 1: find download.moviespage.xyz link
   const step1 = extractHrefLinks(
@@ -209,265 +77,68 @@ async function resolveMoviesdaChain(
     html3 = html1;
   }
 
-  // Extract CDN download links
+  // Extract CDN download links (cdn.uptomkv.ch or similar)
   const dlLinks = extractHrefLinks(
     html3,
-    /href="(https?:\/\/cdn\.[^"]+|https?:\/\/s\d+\.[^"]+\.(?:mp4|mkv)[^"]*)"[^>]*>([^<]+)/gi
+    /href="(https?:\/\/(?:cdn|s\d+)\.[^"]+)"[^>]*>(Download[^<]+)/gi
   );
 
-// Extract watch links - prioritize onestream.today links
-  let watchLinks = extractHrefLinks(
+  // Extract watch online links — moviesda uses play.onestream.today/stream/page/ID
+  const watchLinksRaw = extractHrefLinks(
     html3,
-    /href="(https?:\/\/play\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    /href="(https?:\/\/(?:play|stream|watch|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
   );
 
-  // Fallback to other onestream patterns
-  if (watchLinks.length === 0) {
-    watchLinks = extractHrefLinks(
-      html3,
-      /href="(https?:\/\/(?:play|stream)\.onestream\.today\/[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-    );
-  }
+  console.log("Moviesda - raw watch links:", watchLinksRaw.length);
+  watchLinksRaw.forEach((l, i) => console.log(`  ${i+1}. ${l.name}: ${l.url}`));
 
-  // General streaming patterns
-  if (watchLinks.length === 0) {
-    watchLinks = extractHrefLinks(
-      html3,
-      /href="(https?:\/\/(?:play|stream|watch|online|video)[^"]+|https?:\/\/[^"]*(?:stream|watch|play|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-    );
-  }
-
-  // Additional patterns from remote version
-  const watchSectionLinks = extractHrefLinks(
-    html3,
-    /Watch Online Links<\/div>[\s\S]*?<div class="download">[\s\S]*?href="(https?:\/\/[^"#]+)"[^>]*>([^<]+)</gi
-  );
-
-  const playOnestreamLinks = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/play\.onestream\.today\/stream\/(?:page|video)\/\d+)"[^>]*>([^<]+)</gi,
-    "Watch Online"
-  );
-
-  console.log('Moviesda - Initial watch links:', watchLinks.length);
-  watchLinks.forEach((link, i) => {
-    console.log(`  Initial ${i + 1}. ${link.name}: ${link.url}`);
-  });
-
-  // Additional extraction for direct video streams that might not have proper text
-  const directVideoLinks = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/[^"]*\.(?:mp4|m3u8|webm|mkv)[^"]*)"[^>]*>/gi,
-    "Direct stream"
-  );
-
-  // Specific pattern for moviesda streaming sites - prioritize play.onestream.today
-  const moviesdaStreamLinks2 = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/play\.onestream\.today\/stream\/page\/\d+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-  );
-
-  // Also try other onestream patterns
-  if (moviesdaStreamLinks2.length === 0) {
-    const additionalLinks = extractHrefLinks(
-      html3,
-      /href="(https?:\/\/(?:download\.moviespage\.xyz\/download\/file\/\d+|movies\.downloadpage\.xyz\/download\/file\/\d+|stream\.onestream\.today\/stream\/page\/\d+))"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-    );
-    moviesdaStreamLinks2.push(...additionalLinks);
-  }
-
-  console.log('Moviesda - Stream links found:', moviesdaStreamLinks2.length);
-  moviesdaStreamLinks2.forEach((link, i) => {
-    console.log(`  Stream ${i + 1}. ${link.name}: ${link.url}`);
-  });
-
-  // Also try to catch any onestream variations from moviesda
-  const onestreamVariations = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/(?:download\.moviespage\.xyz\/download\/file\/\d+|movies\.downloadpage\.xyz\/download\/file\/\d+|play\.onestream\.today\/stream\/page\/\d+|stream\.onestream\.today\/stream\/page\/\d+))"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-  );
-
-  console.log('Moviesda - Onestream variations found:', onestreamVariations.length);
-  onestreamVariations.forEach((link, i) => {
-    console.log(`  Variation ${i + 1}. ${link.name}: ${link.url}`);
-  });
-
-  // Resolve moviesda streaming links to stream-resolve URLs
-  const resolvedMoviesdaLinks = [];
-  for (const link of moviesdaStreamLinks2) {
-    try {
-      console.log(`Resolving Moviesda link: ${link.name} -> ${link.url}`);
-      
-      // For onestream links, use stream-resolve API
-      if (link.url.includes('onestream.today')) {
-        console.log(`  -> Direct onestream link, using stream-resolve`);
-        resolvedMoviesdaLinks.push({
-          name: link.name,
-          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
-        });
-      } else if (link.url.includes('download.moviespage.xyz') || link.url.includes('movies.downloadpage.xyz')) {
-        // For moviesda streaming pages, convert to stream page URL
-        const fileId = link.url.match(/\/file\/(\d+)/)?.[1] || link.url.match(/\/download\/(\d+)/)?.[1];
-        console.log(`  -> Moviesda download link, extracted file ID: ${fileId}`);
-        if (fileId) {
-          const streamUrl = `https://stream.onestream.today/stream/page/${fileId}`;
-          console.log(`  -> Converted to stream URL: ${streamUrl}`);
-          resolvedMoviesdaLinks.push({
-            name: link.name,
-            url: `/api/stream-resolve?url=${encodeURIComponent(streamUrl)}`
-          });
-        } else {
-          console.log(`  -> Could not extract file ID, using original URL`);
-          resolvedMoviesdaLinks.push(link);
-        }
-      } else {
-        console.log(`  -> Other link type, using as-is`);
-        // For other links, use as-is
-        resolvedMoviesdaLinks.push(link);
-      }
-    } catch (error) {
-      console.error('Error resolving moviesda link:', error);
+  // Convert play.onestream.today links to stream-resolve API calls
+  const watchLinks = watchLinksRaw.map(link => {
+    if (link.url.includes("onestream.today") || link.url.includes("uptomkv.ch") || link.url.includes("uptodub.ch")) {
+      return {
+        name: link.name || "Watch Online",
+        url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`,
+      };
     }
-  }
-
-  // Also resolve onestream variations
-  for (const link of onestreamVariations) {
-    try {
-      if (link.url.includes('onestream.today')) {
-        resolvedMoviesdaLinks.push({
-          name: link.name,
-          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
-        });
-      } else if (link.url.includes('download.moviespage.xyz') || link.url.includes('movies.downloadpage.xyz')) {
-        // For moviesda streaming pages, convert to stream page URL
-        const fileId = link.url.match(/\/file\/(\d+)/)?.[1] || link.url.match(/\/download\/(\d+)/)?.[1];
-        if (fileId) {
-          const streamUrl = `https://stream.onestream.today/stream/page/${fileId}`;
-          resolvedMoviesdaLinks.push({
-            name: link.name,
-            url: `/api/stream-resolve?url=${encodeURIComponent(streamUrl)}`
-          });
-        } else {
-          resolvedMoviesdaLinks.push(link);
-        }
-      } else {
-        resolvedMoviesdaLinks.push(link);
-      }
-    } catch (error) {
-      console.error('Error resolving onestream variation:', error);
-    }
-  }
-
-  // Additional extraction for streaming domains
-  const streamingLinks = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/(?:[^"]*\.?stream[^"]*|[^"]*\.?play[^"]*|[^"]*\.?watch[^"]*|dub[^"]*|video[^"]*)[^"]+)"[^>]*>/gi
-  );
-
-  // General pattern for any onestream.today URLs (catch-all)
-  const generalOnestreamLinks = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/[^"]*onestream\.today\/[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-  );
-
-  // If still no links, try without text requirement
-  if (generalOnestreamLinks.length === 0) {
-    const fallbackLinks = extractHrefLinks(
-      html3,
-      /href="(https?:\/\/[^"]*onestream\.today\/[^"]+)"[^>]*>/gi
-    );
-    generalOnestreamLinks.push(...fallbackLinks);
-  }
-
-  // Resolve general onestream links
-  const resolvedGeneralLinks = [];
-  for (const link of generalOnestreamLinks) {
-    try {
-      if (link.url.includes('onestream.today')) {
-        resolvedGeneralLinks.push({
-          name: link.name,
-          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
-        });
-      } else {
-        resolvedGeneralLinks.push(link);
-      }
-    } catch (error) {
-      console.error('Error resolving general onestream link:', error);
-    }
-  }
-
-  // Debug logging for each source
-  console.log('Moviesda - Link sources:');
-  console.log(`  watchLinks: ${watchLinks.length}`);
-  console.log(`  watchSectionLinks: ${watchSectionLinks.length}`);
-  console.log(`  playOnestreamLinks: ${playOnestreamLinks.length}`);
-  console.log(`  resolvedMoviesdaLinks: ${resolvedMoviesdaLinks.length}`);
-  console.log(`  onestreamVariations: ${onestreamVariations.length}`);
-  console.log(`  directVideoLinks: ${directVideoLinks.length}`);
-  console.log(`  streamingLinks: ${streamingLinks.length}`);
-  console.log(`  resolvedGeneralLinks: ${resolvedGeneralLinks.length}`);
-
-  // Merge all watch links, removing duplicates
-  const allWatchLinks = [
-    ...watchLinks,
-    ...watchSectionLinks,
-    ...playOnestreamLinks,
-    ...resolvedMoviesdaLinks,
-    ...onestreamVariations,
-    ...directVideoLinks,
-    ...streamingLinks,
-    ...resolvedGeneralLinks,
-  ];
-  
-  console.log(`Moviesda - Total links before dedup: ${allWatchLinks.length}`);
-  watchLinks = dedupeLinks(allWatchLinks);
-
-  // Prioritize and limit to only 2 best watch online links
-  watchLinks = prioritizeAndLimitLinks(watchLinks, 2);
-
-  // Debug logging for watch links
-  console.log('Moviesda - Final watch links (limited to 2):', watchLinks.length);
-  watchLinks.forEach((link, i) => {
-    console.log(`  ${i + 1}. ${link.name}: ${link.url}`);
+    return link;
   });
 
-  // Comprehensive fallback: grab all streaming links with multiple patterns
+  // De-duplicate
+  const uniqueWatch = watchLinks.filter((link, idx, self) =>
+    idx === self.findIndex(l => l.url === link.url)
+  );
+
+  console.log("Moviesda - final watch links:", uniqueWatch.length);
+
   if (dlLinks.length === 0) {
+    // Broader fallback
     const allLinks = extractHrefLinks(
       html3,
       /href="(https?:\/\/[^"#]+)"[^>]*>\s*((?:Download|Watch|Stream|Play|Online|Video|Now)[^<]+)/gi
     );
-    
-    // Filter for download links
-    const dl = allLinks.filter((l) => l.name.toLowerCase().includes("download"));
-    
-    // Comprehensive filter for watch links - catch any possible streaming link
-    const wl = allLinks.filter((l) => {
-      const name = l.name.toLowerCase();
-      const url = l.url.toLowerCase();
-      return name.includes("watch") || 
-             name.includes("stream") || 
-             name.includes("play") || 
-             name.includes("online") ||
-             name.includes("video") ||
-             url.includes("stream") ||
-             url.includes("play") ||
-             url.includes("watch") ||
-             url.includes("video") ||
-             url.includes("onestream") ||
-             url.includes("moviespage") ||
-             url.includes("downloadpage");
-    });
-    
+    const dl = allLinks.filter(l => l.name.toLowerCase().includes("download"));
+    const wl = allLinks
+      .filter(l => {
+        const n = l.name.toLowerCase();
+        const u = l.url.toLowerCase();
+        return n.includes("watch") || n.includes("stream") || n.includes("play") || n.includes("online") || u.includes("onestream") || u.includes("uptomkv");
+      })
+      .map(link => ({
+        name: link.name || "Watch Online",
+        url: link.url.includes("onestream.today") || link.url.includes("uptomkv")
+          ? `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
+          : link.url,
+      }));
     return { serverLinks: dl, watchLinks: wl };
   }
 
-  return { serverLinks: dlLinks, watchLinks };
+  return { serverLinks: dlLinks, watchLinks: uniqueWatch };
 }
 
 /**
- * Isaidub download chain:
- * /download/page/ID/ → dubpage.xyz/download/view/ID → dubmv.top/download/file/ID → CDN links
+ * Isaidub.guru download chain:
+ * /download/page/ID/ → dubpage.xyz/download/view/ID → dubmv.xyz/download/file/ID
+ * Final page has: CDN links (dub.uptodub.ch) + dub.onestream.today/stream/video/ID watch links
  */
 async function resolveIsaidubChain(
   pageUrl: string,
@@ -490,121 +161,87 @@ async function resolveIsaidubChain(
   let html3 = "";
   if (step1.length > 0) {
     const html2 = await fetchHtml(step1[0].url, siteBase);
-    // Step 2: dubmv.top
+    // Step 2: dubmv.xyz (updated from dubmv.top)
     const step2 = extractHrefLinks(
       html2,
-      /href="(https?:\/\/dubmv\.top\/download\/file\/\d+)"[^>]*>([^<]+)/gi
+      /href="(https?:\/\/dubmv\.xyz\/download\/file\/\d+)"[^>]*>([^<]+)/gi
     );
     if (step2.length > 0) {
       html3 = await fetchHtml(step2[0].url, step1[0].url);
     } else {
-      html3 = html2;
+      // Try legacy dubmv.top as fallback
+      const step2b = extractHrefLinks(
+        html2,
+        /href="(https?:\/\/dubmv\.top\/download\/file\/\d+)"[^>]*>([^<]+)/gi
+      );
+      if (step2b.length > 0) {
+        html3 = await fetchHtml(step2b[0].url, step1[0].url);
+      } else {
+        html3 = html2;
+      }
     }
   } else {
     html3 = html1;
   }
 
-  // Extract CDN download links (dubshare)
+  // Extract CDN download links (dub.uptodub.ch or dub.dubshare.*)
   const dlLinks = extractHrefLinks(
     html3,
-    /href="(https?:\/\/s\d+\.dubshare\.[^"]+)"[^>]*>(Download[^<]+)/gi
+    /href="(https?:\/\/(?:dub\.uptodub\.[^"]+|s\d+\.dubshare\.[^"]+))"[^>]*>(Download[^<]+)/gi
   );
 
-  // Extract watch links directly from the resolved download page.
-  let watchLinks = extractHrefLinks(
+  // Extract watch links — isaidub uses dub.onestream.today/stream/video/ID
+  const watchLinksRaw = extractHrefLinks(
     html3,
-    /href="(https?:\/\/(?:dub\.[^"]*stream|stream|watch|play|online|video)[^"]+|https?:\/\/[^"]*(?:stream|watch|play|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
+    /href="(https?:\/\/(?:dub\.onestream\.today|stream|watch|play)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
   );
 
-  const watchSectionLinks = extractHrefLinks(
-    html3,
-    /Watch Online Links<\/div>[\s\S]*?<div class="download">[\s\S]*?href="(https?:\/\/[^"#]+)"[^>]*>([^<]+)</gi
-  );
+  console.log("Isaidub - raw watch links:", watchLinksRaw.length);
+  watchLinksRaw.forEach((l, i) => console.log(`  ${i+1}. ${l.name}: ${l.url}`));
 
-  console.log('Isaidub - Initial watch links:', watchLinks.length);
-  watchLinks.forEach((link, i) => {
-    console.log(`  Initial ${i + 1}. ${link.name}: ${link.url}`);
-  });
-
-  // Specific pattern for onestream.today links found in isaidub
-  const onestreamLinks = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/(?:dub|play)\.onestream\.today\/stream\/(?:video|page)\/\d+)"[^>]*>([^<]+)</gi,
-    "Watch Online"
-  );
-
-  console.log('Isaidub - Onestream links found:', onestreamLinks.length);
-  onestreamLinks.forEach((link, i) => {
-    console.log(`  Onestream ${i + 1}. ${link.name}: ${link.url}`);
-  });
-
-  // Resolve onestream links to actual video URLs
-  const resolvedOnestreamLinks = [];
-  for (const link of onestreamLinks) {
-    try {
-      // For now, just pass the onestream URL - the frontend will resolve it
-      // This avoids making the details API too slow
-      resolvedOnestreamLinks.push({
-        name: link.name,
-        url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
-      });
-    } catch (error) {
-      console.error('Error resolving onestream link:', error);
+  // Convert to stream-resolve API calls
+  const watchLinks = watchLinksRaw.map(link => {
+    if (link.url.includes("onestream.today") || link.url.includes("uptodub.ch") || link.url.includes("dubshare")) {
+      return {
+        name: link.name || "Watch Online",
+        url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`,
+      };
     }
-  }
-
-  // Additional extraction for direct video streams that might not have proper text
-  const directVideoLinks = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/[^"]*\.(?:mp4|m3u8|webm|mkv)[^"]*)"[^>]*>/gi,
-    "Direct stream"
-  );
-
-  // Additional extraction for streaming domains (specific to isaidub)
-  const streamingLinks = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/(?:[^"]*\.?stream[^"]*|[^"]*\.?play[^"]*|[^"]*\.?watch[^"]*|dub[^"]*|video[^"]*|dubshare[^"]*)[^"]+)"[^>]*>/gi
-  );
-
-  // Merge all watch links, removing duplicates
-  const allWatchLinks = [
-    ...watchLinks,
-    ...watchSectionLinks,
-    ...resolvedOnestreamLinks,
-    ...directVideoLinks,
-    ...streamingLinks,
-  ];
-  watchLinks = dedupeLinks(allWatchLinks);
-
-  // Prioritize and limit to only 2 best watch online links
-  watchLinks = prioritizeAndLimitLinks(watchLinks, 2);
-
-  // Debug logging for watch links
-  console.log('Isaidub - Final watch links (limited to 2):', watchLinks.length);
-  watchLinks.forEach((link, i) => {
-    console.log(`  ${i + 1}. ${link.name}: ${link.url}`);
+    return link;
   });
+
+  const uniqueWatch = watchLinks.filter((link, idx, self) =>
+    idx === self.findIndex(l => l.url === link.url)
+  );
+
+  console.log("Isaidub - final watch links:", uniqueWatch.length);
 
   if (dlLinks.length === 0) {
     const allLinks = extractHrefLinks(
       html3,
       /href="(https?:\/\/[^"#]+)"[^>]*>\s*((?:Download|Watch|Stream|Play|Online|Video|Now)[^<]+)/gi
     );
-    const dl = allLinks.filter((l) => l.name.toLowerCase().includes("download"));
-    const wl = allLinks.filter((l) => l.name.toLowerCase().includes("watch") || 
-                                   l.name.toLowerCase().includes("stream") || 
-                                   l.name.toLowerCase().includes("play") || 
-                                   l.name.toLowerCase().includes("online"));
+    const dl = allLinks.filter(l => l.name.toLowerCase().includes("download"));
+    const wl = allLinks
+      .filter(l => {
+        const n = l.name.toLowerCase();
+        const u = l.url.toLowerCase();
+        return n.includes("watch") || n.includes("stream") || n.includes("play") || n.includes("online") || u.includes("onestream") || u.includes("uptodub");
+      })
+      .map(link => ({
+        name: link.name || "Watch Online",
+        url: link.url.includes("onestream.today") || link.url.includes("uptodub")
+          ? `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
+          : link.url,
+      }));
     return { serverLinks: dl, watchLinks: wl };
   }
 
-  return { serverLinks: dlLinks, watchLinks };
+  return { serverLinks: dlLinks, watchLinks: uniqueWatch };
 }
 
 /**
  * Extract sub-navigation items from a movie/anime detail page.
- * Returns quality groups, quality options, or file list items.
- * Strictly filters out A-Z nav links and site navigation.
  */
 function extractSubItems(
   html: string,
@@ -613,14 +250,12 @@ function extractSubItems(
 ): { name: string; url: string }[] {
   const items: { name: string; url: string }[] = [];
 
-  // For animesalt, extract anime episode/detail links
   if (site === "animesalt") {
     const cleanHtml = html
       .replace(/<header[\s\S]*?<\/header>/gi, "")
       .replace(/<footer[\s\S]*?<\/footer>/gi, "")
       .replace(/<nav[\s\S]*?<\/nav>/gi, "");
 
-    // Try to find episode links or anime detail links
     const episodeRe =
       /<a[^>]+href="([^"]*(?:episode|ep|watch|anime)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
     let m: RegExpExecArray | null;
@@ -637,7 +272,6 @@ function extractSubItems(
       }
     }
 
-    // Fallback: get all internal anime-related links
     if (items.length === 0) {
       const allLinkRe = /<a[^>]+href="(\/[^"?#]+)"[^>]*>([^<]+)<\/a>/gi;
       while ((m = allLinkRe.exec(cleanHtml)) !== null) {
@@ -676,14 +310,10 @@ function extractSubItems(
 
   if (items.length > 0) return items;
 
-  // Method 2: internal links that are sub-pages (have movie/quality context)
-  // Only pick links that are clearly sub-pages of the current movie
-  // Current page: /kumbaari-2024-tamil-movie/
-  // Sub-pages: /kumbaari-original-movie/, /kumbaari-720p-hd-movie/, /download/xxx/
+  // Method 2: internal links that are sub-pages
   const allLinkRe =
     /<a[^>]+href="(\/[^"?#]+)"[^>]*>([^<]+)<\/a>/gi;
 
-  // Skip links text patterns
   const skipTexts = new Set([
     "Home", "Contact Us", "DMCA", "Download Now", "Go to Home",
     "SMS", "Facebook", "Twitter", "Whatsapp", "Telegram Channel",
@@ -692,7 +322,6 @@ function extractSubItems(
     "N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
   ]);
 
-  // Skip URL patterns
   const skipUrlRe =
     /^\/(?:tamil-\d{4}-movies|tamil-dubbed|tamilrockers|tamil-hd|tamil-web-series|tamil-movies-collection|moviesda-tamil|tamil-atoz|tamil-yearly|tamil-single|latest-updates|home\.php|movies\/[a-z]\/)[\/?]/;
 
@@ -714,24 +343,46 @@ function extractSubItems(
   return items;
 }
 
+/** Scrape movie poster from the source site page */
+async function scrapeSitePoster(movieUrl: string, siteBase: string): Promise<string | null> {
+  try {
+    const fullUrl = movieUrl.startsWith("http") ? movieUrl : `${siteBase}${movieUrl}`;
+    const html = await fetchHtml(fullUrl, siteBase);
+    
+    // Look for poster image: /uploads/posters/slug.webp or .jpg
+    const posterMatch = html.match(/<(?:source|img)[^>]+srcset="([^"]*\/uploads\/posters\/[^"]+\.(?:webp|jpg|jpeg|png))"[^>]*>/i)
+      || html.match(/<img[^>]+src="([^"]*\/uploads\/posters\/[^"]+\.(?:webp|jpg|jpeg|png))"[^>]*>/i);
+    
+    if (posterMatch && posterMatch[1]) {
+      const posterPath = posterMatch[1];
+      return posterPath.startsWith("http") ? posterPath : `${siteBase}${posterPath}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const urlParam = req.nextUrl.searchParams.get("url") || "";
   const site = req.nextUrl.searchParams.get("site") || "moviesda";
   const siteBase = SITES[site] || SITES.moviesda;
-
-  console.log('Details API called with:', { urlParam, site, siteBase });
+  const posterOnly = req.nextUrl.searchParams.get("posterOnly") === "1";
 
   if (!urlParam)
-    return NextResponse.json({ items: [], serverLinks: [], watchLinks: [] });
+    return NextResponse.json({ items: [], serverLinks: [], watchLinks: [], poster: null });
+
+  // If only requesting poster from source site
+  if (posterOnly) {
+    const poster = await scrapeSitePoster(urlParam, siteBase);
+    return NextResponse.json({ poster });
+  }
 
   try {
-    // Detect if this is a download trigger page
     const isMoviesdaDownload =
-      site === "moviesda" && (/^\/download\/(page\/)?/.test(urlParam) || urlParam.includes('movies.downloadpage.xyz'));
+      site === "moviesda" && /^\/download\//.test(urlParam);
     const isIsaidubDownload =
       site === "isaidub" && /^\/download\/page\//.test(urlParam);
-
-    console.log('URL detection:', { isMoviesdaDownload, isIsaidubDownload });
 
     if (isMoviesdaDownload) {
       const result = await resolveMoviesdaChain(urlParam, siteBase);
@@ -750,6 +401,15 @@ export async function GET(req: NextRequest) {
     const html = await fetchHtml(fullUrl, siteBase);
 
     const items = extractSubItems(html, urlParam, site);
+
+    // Also try to extract poster from this page
+    let poster: string | null = null;
+    const posterMatch = html.match(/<(?:source|img)[^>]+srcset="([^"]*\/uploads\/posters\/[^"]+\.(?:webp|jpg|jpeg|png))"[^>]*>/i)
+      || html.match(/<img[^>]+src="([^"]*\/uploads\/posters\/[^"]+\.(?:webp|jpg|jpeg|png))"[^>]*>/i);
+    if (posterMatch && posterMatch[1]) {
+      const p = posterMatch[1];
+      poster = p.startsWith("http") ? p : `${siteBase}${p}`;
+    }
 
     // If items contain download page links, auto-resolve them all
     const downloadItems = items.filter(
@@ -774,7 +434,6 @@ export async function GET(req: NextRequest) {
             } else {
               resolved = await resolveIsaidubChain(item.url, siteBase);
             }
-            // Tag each link with the file name for clarity
             for (const l of resolved.serverLinks) {
               allServerLinks.push({
                 name: `${item.name} — ${l.name}`,
@@ -802,13 +461,14 @@ export async function GET(req: NextRequest) {
           ),
           serverLinks: allServerLinks,
           watchLinks: allWatchLinks,
+          poster,
         });
       }
     }
 
-    return NextResponse.json({ items, serverLinks: [], watchLinks: [] });
+    return NextResponse.json({ items, serverLinks: [], watchLinks: [], poster });
   } catch (err) {
     console.error("Details error:", err);
-    return NextResponse.json({ items: [], serverLinks: [], watchLinks: [] });
+    return NextResponse.json({ items: [], serverLinks: [], watchLinks: [], poster: null });
   }
 }

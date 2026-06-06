@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
 const SITES: Record<string, string> = {
-  moviesda: "https://moviesda18.com",
-  isaidub: "https://isaidub.love",
+  moviesda: "https://moviesda31.com",
+  isaidub: "https://isaidub.guru",
   animesalt: "https://animesalt.ac",
 };
 
@@ -32,7 +32,6 @@ export async function GET(req: NextRequest) {
         const text = $(el).text().trim();
         if (!text || text.length < 2) return;
         
-        // Filter for anime category links
         const isCategory =
           (href.match(/\/(genre|type|season|year|status|anime)/i) ||
            href.match(/(anime|season|year|genre)/i)) &&
@@ -47,14 +46,12 @@ export async function GET(req: NextRequest) {
             ? href.replace(baseUrl, "")
             : href;
           
-          // Avoid duplicates
           if (!categories.find((c) => c.url === url) && url.startsWith("/")) {
             categories.push({ name: text, url });
           }
         }
       });
 
-      // If scraping didn't work, try alternative selectors
       if (categories.length === 0) {
         $("nav a, .menu a, .navigation a, header a").each((_, el) => {
           const href = $(el).attr("href") || "";
@@ -70,7 +67,6 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Fallback to hardcoded categories if still empty
       if (categories.length === 0) {
         return NextResponse.json({
           categories: [
@@ -103,7 +99,6 @@ export async function GET(req: NextRequest) {
       const text = $(el).text().trim();
       if (!text || text.length < 3) return;
       
-      // Filter for category-like links
       const isCategory =
         href.match(/\/(tamil|hindi|dubbed|movies|collection|series|web)/i) &&
         !href.match(/\.(jpg|png|gif|mp4|zip|rar)/i) &&
@@ -115,14 +110,12 @@ export async function GET(req: NextRequest) {
           ? href.replace(baseUrl, "")
           : href;
         
-        // Avoid duplicates
         if (!categories.find((c) => c.url === url) && url.startsWith("/")) {
           categories.push({ name: text, url });
         }
       }
     });
 
-    // If no categories found via scraping, use known ones
     if (categories.length === 0) {
       if (site === "moviesda") {
         return NextResponse.json({
@@ -139,11 +132,11 @@ export async function GET(req: NextRequest) {
             { name: "Tamil 2017 Movies", url: "/tamil-2017-movies/" },
             { name: "Tamil Movies Collection", url: "/tamil-movies-collection/" },
             { name: "Tamil Single Parts Movies", url: "/moviesda-tamil-collections/" },
-            { name: "Tamil HD Mobile Movies", url: "/tamil-hd-movies/" },
-            { name: "Tamil A to Z Movies", url: "/tamil-atoz-movies/" },
+            { name: "Tamil HD Mobile Movies", url: "/tamil-hd-movies-download/" },
+            { name: "Tamil A to Z Movies", url: "/tamil-movies/" },
             { name: "Latest Tamil Web Series", url: "/tamil-web-series-download/" },
             { name: "Tamil Dubbed Movies", url: "/tamil-dubbed-movies/" },
-            { name: "Daily Updated Tamil Movies", url: "/tamilrockers-movies/" },
+            { name: "Daily Updated Tamil Movies", url: "/tamilrockers-movies-download/" },
           ],
         });
       } else if (site === "isaidub") {

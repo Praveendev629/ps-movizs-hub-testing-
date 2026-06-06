@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SITES: Record<string, string> = {
-  moviesda: "https://moviesda18.com",
-  isaidub: "https://isaidub.love",
+  moviesda: "https://moviesda31.com",
+  isaidub: "https://isaidub.guru",
   animesalt: "https://animesalt.ac",
 };
     
@@ -11,7 +11,7 @@ const HEADERS = {
   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
   "Accept-Encoding": "gzip, deflate, br",
-  "Referer": "https://isaidub.love/",
+  "Referer": "https://moviesda31.com/",
   "DNT": "1",
 };
 
@@ -27,13 +27,11 @@ async function fetchPage(url: string): Promise<string> {
 function extractLetterLinks(html: string): { title: string; url: string }[] {
   const letters: { title: string; url: string }[] = [];
   
-  // Match letter links - handle both direct text and <font> wrapped text
-  // Example: <a href="/path/a"><font>A</font></a> or <a href="/path/a">A</a>
   const re = /<a[^>]*href="([^"]*\/[a-z])(?:\/)?[^"]*"[^>]*>(?:<[^>]*>)*([A-Z])(?:<\/[^>]*>)*<\/a>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
-    const url = m[1]; // href without the trailing slash
-    const letter = m[2]; // The letter itself
+    const url = m[1];
+    const letter = m[2];
     
     if (/^[A-Z]$/.test(letter)) {
       const normalized = url.replace(/\/+$/, "");
@@ -43,7 +41,6 @@ function extractLetterLinks(html: string): { title: string; url: string }[] {
     }
   }
   
-  // If the above regex didn't work, try a simpler approach
   if (letters.length === 0) {
     const simpleRe = /<a\s+href="([^"]*\/[a-z]\/?)"[^>]*>[\s\S]*?([A-Z])[\s\S]*?<\/a>/gi;
     let m2: RegExpExecArray | null;
@@ -64,9 +61,6 @@ function extractLetterLinks(html: string): { title: string; url: string }[] {
   return letters;
 }
 
-
-
-
 /** Check if a page is a pure A-Z index (only letter links, no real movie links) */
 function hasMovieAnchors(html: string): boolean {
   const anchorRe = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
@@ -83,7 +77,7 @@ function hasMovieAnchors(html: string): boolean {
     if (href.includes("atoz") || href.match(/\/([a-z])$/i)) continue;
     if (href.includes(".jpg") || href.includes(".png") || href.includes(".gif") || href.includes(".mp4") || href.includes(".zip")) continue;
 
-    if (href.startsWith("http") && !href.includes("isaidub.love") && !href.includes("moviesda18.com")) continue;
+    if (href.startsWith("http") && !href.includes("isaidub.guru") && !href.includes("isaidub.love") && !href.includes("moviesda31.com") && !href.includes("moviesda18.com")) continue;
     if (href.startsWith("/") || href.includes("/movie/") || href.includes("-movies") || href.includes("/tamil-")) {
       count += 1;
       if (count > 4) return true;
@@ -105,7 +99,6 @@ function isAtoZIndex(html: string, url: string): boolean {
     return !hasMovieAnchors(html);
   }
 
-  // Only treat as A-Z if there are no movie-like anchor links.
   return !hasMovieAnchors(html);
 }
 
@@ -113,9 +106,7 @@ function isAtoZIndex(html: string, url: string): boolean {
 function getLastPage(html: string, site: string): number {
   let max = 1;
   
-  // For isaidub, look for pagination with get-page parameter
   if (site === "isaidub") {
-    // Pattern: ?get-page=14 or similar
     const re1 = /\?get-page=(\d+)/g;
     let m: RegExpExecArray | null;
     while ((m = re1.exec(html)) !== null) {
@@ -123,7 +114,6 @@ function getLastPage(html: string, site: string): number {
       if (n > max) max = n;
     }
     
-    // Also look for pagination patterns like "Page 1 of 14"
     const re2 = /(?:Page\s+\d+\s+of\s+|showing\s+\d+\s+of\s+)(\d+)/gi;
     let m2: RegExpExecArray | null;
     while ((m2 = re2.exec(html)) !== null) {
@@ -131,7 +121,6 @@ function getLastPage(html: string, site: string): number {
       if (n > max) max = n;
     }
 
-    // Also detect letter page pagination links like /a/2, /b/3, etc.
     const re3 = /href="[^"]*\/([a-zA-Z])\/(\d+)(?:\/|")/gi;
     let m3: RegExpExecArray | null;
     while ((m3 = re3.exec(html)) !== null) {
@@ -143,7 +132,7 @@ function getLastPage(html: string, site: string): number {
     return max;
   }
   
-  // For moviesda
+  // For moviesda - ?page=N pagination
   const queryRe = /\?page=(\d+)/g;
   let m: RegExpExecArray | null;
   while ((m = queryRe.exec(html)) !== null) {
@@ -181,7 +170,8 @@ function isIsaidubLetterPageUrl(url: string): boolean {
   const cleaned = url.split("?")[0].replace(/\/+$/, "");
   return /atoz\/[a-zA-Z]$/.test(cleaned);
 }
-/** Extract movie/anime links from a page, filtering out nav/alphabet/pagination links */
+
+/** Extract movie/anime links from a page */
 function extractMoviesFromPage(
   html: string,
   baseUrl: string,
@@ -189,9 +179,7 @@ function extractMoviesFromPage(
 ): { title: string; url: string }[] {
   const movies: { title: string; url: string }[] = [];
 
-  // For animesalt, scrape anime cards/links
   if (site === "animesalt") {
-    // Try to find anime cards or list items
     const animeSelectors = [
       /<a[^>]+href="([^"]*(?:anime|watch|episode)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
       /<a[^>]+href="([^"]*\/anime\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
@@ -206,8 +194,6 @@ function extractMoviesFromPage(
         
         if (!text || text.length < 2) continue;
         if (href.includes(".jpg") || href.includes(".png") || href.includes(".gif")) continue;
-        
-        // Skip navigation and non-anime links
         if (text.match(/^(home|login|register|search|menu|genre|type|season)/i)) continue;
         
         if (!movies.find(m => m.url === href)) {
@@ -215,7 +201,6 @@ function extractMoviesFromPage(
         }
       }
       
-      // If we found anime, break the loop
       if (movies.length > 0) break;
     }
 
@@ -223,8 +208,7 @@ function extractMoviesFromPage(
     return movies;
   }
 
-  // First, try to match div.f structure (isaidub letter pages)
-  // Example: <div class="f"> <img .../> <a href="/movie/...">Title</a> </div>
+  // First, try to match div.f structure (isaidub/moviesda folder list pages)
   const divFWrapperRegex = /<div[^>]*class=(?:"|')?[^"'>]*\bf\b[^"'>]*(?:"|')?[^>]*>([\s\S]*?)<\/div>/gi;
   let match: RegExpExecArray | null;
   while ((match = divFWrapperRegex.exec(html)) !== null) {
@@ -236,7 +220,12 @@ function extractMoviesFromPage(
     const text = anchorMatch[2].replace(/<[^>]*>/g, "").trim();
     if (!text || text.length < 2) continue;
 
-    if (href && href.includes("/movie/")) {
+    // For isaidub, movie links are /movie/...
+    if (site === "isaidub" && href && href.includes("/movie/")) {
+      if (!movies.find(m => m.url === href)) {
+        movies.push({ title: text, url: href });
+      }
+    } else if (site === "moviesda" && href && (href.startsWith("/") || href.includes("moviesda31.com"))) {
       if (!movies.find(m => m.url === href)) {
         movies.push({ title: text, url: href });
       }
@@ -261,16 +250,13 @@ function extractMoviesFromPage(
     }
   }
 
-  // If div.f or moviesda direct parse didn't find movies, try the generic approach
   if (movies.length === 0) {
-    // Remove navigation, headers, footers, nav sections
     let cleanHtml = html
       .replace(/<header[\s\S]*?<\/header>/gi, "")
       .replace(/<nav[\s\S]*?<\/nav>/gi, "")
       .replace(/<footer[\s\S]*?<\/footer>/gi, "")
       .replace(/<div[^>]*class="[^"]*(?:alpha|letter|alphabet|pagination|nav|breadcrumb|pagecontent)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "");
 
-    // Extract all anchor tags with their href and text
     const linkRegex = /<a[^>]+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
     let match2: RegExpExecArray | null;
 
@@ -280,33 +266,30 @@ function extractMoviesFromPage(
       const href = match2[1].trim();
       const text = match2[2].replace(/<[^>]*>/g, "").trim();
 
-      // Basic filters
       if (!text || text.length < 2) continue;
       if (!href || href === "/" || href === "#") continue;
 
-      // Skip obvious non-movie links
-      if (/^[A-Z]$/.test(text)) continue; // Single letters
-      if (/^\d+$/.test(text)) continue; // Page numbers
+      if (/^[A-Z]$/.test(text)) continue;
+      if (/^\d+$/.test(text)) continue;
       if (["»", "«", "Next", "Prev", "Previous", "Home", "Contact", "Category"].includes(text)) continue;
-      if (href.includes("?")) continue; // Pagination links
+      if (href.includes("?")) continue;
       if (href.includes("facebook.com") || href.includes("twitter.com") || href.includes("telegram")) continue;
 
       candidates.push({ url: href, title: text });
     }
 
-    // Filter candidates to keep only movie/anime-like URLs
     const movieCandidates = candidates.filter(c => {
       const url = c.url.toLowerCase();
       const text = c.title;
       const hasYear = /\(\d{4}\)/.test(text);
       
       const isMovieUrl = url.includes("/movie/") || url.includes("/series/") || /-(?:movie|moviesda)(?:\/|$)/i.test(url);
-      const isInternal = url.startsWith("/") || url.includes("moviesda18.com") || url.includes("animesalt.ac");
+      const isInternal = url.startsWith("/") || url.includes("moviesda31.com") || url.includes("animesalt.ac") || url.includes("isaidub.guru");
       const isLetterOrPage = !!url.match(/\/[a-z]([\/#]|$)/) || !!url.match(/\/page\/(\d+)/);
       const isNotIndex = !isLetterOrPage;
       
       if (site === "moviesda") {
-        return isInternal && isNotIndex && (isMovieUrl || hasYear || url.includes("tamil-movies") || url.includes("moviesda18.com/tamil-movies"));
+        return isInternal && isNotIndex && (isMovieUrl || hasYear || url.includes("tamil-movies") || url.includes("moviesda31.com"));
       }
 
       if (site === "animesalt") {
@@ -318,7 +301,6 @@ function extractMoviesFromPage(
       return (isMovieUrl || hasMovieContext) && isNotIndex;
     });
 
-    // Remove duplicates and add to result
     for (const candidate of movieCandidates) {
       if (!movies.find(m => m.url === candidate.url)) {
         movies.push({ title: candidate.title, url: candidate.url });
@@ -333,9 +315,6 @@ function extractMoviesFromPage(
   return movies;
 }
 
-
-
-
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url") || "";
   const site = req.nextUrl.searchParams.get("site") || "moviesda";
@@ -344,16 +323,13 @@ export async function GET(req: NextRequest) {
   if (!url) return NextResponse.json([]);
 
   try {
-    const pageParam = site === "isaidub" ? "get-page" : "page";
     let fullUrl = url.startsWith("http") ? url : `${siteBase}${url}`;
     if (site === "isaidub" && isIsaidubLetterPageUrl(url)) {
       fullUrl = fullUrl.replace(/\/+$/, "");
     }
 
-    // Fetch first page
     const firstHtml = await fetchPage(fullUrl);
 
-    // Check if this is a pure A-Z index page
     const letters = extractLetterLinks(firstHtml);
     const isAtoZ = isAtoZIndex(firstHtml, url);
 
@@ -362,18 +338,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(letters);
     }
 
-    // Extract movies from first page
     let allMovies = extractMoviesFromPage(firstHtml, fullUrl, site);
     console.log(`First page: ${allMovies.length} movies`);
 
-    // Get pagination info
     const lastPage = getLastPage(firstHtml, site);
     const isMoviesdaLetterPage = site === "moviesda" && isMoviesdaLetterPageUrl(url);
     const isAnimesaltPage = site === "animesalt";
     const pageMode = site === "moviesda"
       ? (usesMoviesdaPathPagination(firstHtml) ? "path" : "query")
       : "query";
-    // For isaidub, allow up to 50 pages; for moviesda, cap at 30; for animesalt, cap at 20
     const maxPages = site === "isaidub" ? Math.min(lastPage, 50) : site === "animesalt" ? Math.min(lastPage, 20) : Math.min(lastPage, 30);
     console.log(`URL: ${fullUrl}`);
     console.log(`Last page detected: ${lastPage}, page mode: ${pageMode}`);
@@ -403,7 +376,7 @@ export async function GET(req: NextRequest) {
         console.log(`Queueing page ${p}: ${pageUrl}`);
         pagePromises.push(fetchPage(pageUrl).catch(err => {
           console.log(`Error fetching page ${p}: ${err}`);
-          return ""; // Return empty on error
+          return "";
         }));
       }
       const results = await Promise.allSettled(pagePromises);

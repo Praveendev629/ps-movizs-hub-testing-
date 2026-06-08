@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, X, ChevronRight, Loader2, Film, Globe,
   Download, Play, Pause, Volume2, VolumeX, Maximize2, Minimize2,
-  Tv, SkipForward, SkipBack,
+  Tv, SkipForward, SkipBack, Star,
 } from "lucide-react";
  
 
@@ -55,11 +55,12 @@ function needsProxy(url: string): boolean {
 }
 
 // ── Poster cache ───────────────────────────────────────────────────────────
-const posterCache = new Map<string, string | null>();
+const posterCache = new Map<string, { poster: string | null; rating: string | null }>();
 
 // ── MoviePoster ────────────────────────────────────────────────────────────
-const MoviePoster = memo(function MoviePoster({ title, movieUrl, site }: { title: string; movieUrl?: string; site?: string }) {
+const MoviePoster = memo(function MoviePoster({ title }: { title: string }) {
   const [poster, setPoster] = useState<string | null>(null);
+  const [rating, setRating] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [inView, setInView] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -75,24 +76,33 @@ const MoviePoster = memo(function MoviePoster({ title, movieUrl, site }: { title
 
   useEffect(() => {
     if (!inView) return;
-    const cacheKey = movieUrl || title;
-    if (posterCache.has(cacheKey)) { setPoster(posterCache.get(cacheKey) ?? null); setLoading(false); return; }
+    const cacheKey = title;
+    if (posterCache.has(cacheKey)) {
+      const cached = posterCache.get(cacheKey)!;
+      setPoster(cached.poster);
+      setRating(cached.rating);
+      setLoading(false);
+      return;
+    }
     let alive = true;
     (async () => {
       try {
-        // Build query: include movieUrl+site to get site-native poster first
-        let url = `/api/poster?q=${encodeURIComponent(title)}`;
-        if (movieUrl && site) {
-          url += `&movieUrl=${encodeURIComponent(movieUrl)}&site=${encodeURIComponent(site)}`;
-        }
-        const res = await fetch(url);
+        // Fetch IMDB poster + rating (no watermarks)
+        const res = await fetch(`/api/poster?q=${encodeURIComponent(title)}`);
         const data = await res.json();
-        if (alive) { setPoster(data.poster); posterCache.set(cacheKey, data.poster); }
-      } catch { if (alive) setPoster(null); }
-      finally { if (alive) setLoading(false); }
+        if (alive) {
+          setPoster(data.poster ?? null);
+          setRating(data.rating ?? null);
+          posterCache.set(cacheKey, { poster: data.poster ?? null, rating: data.rating ?? null });
+        }
+      } catch {
+        if (alive) { setPoster(null); setRating(null); }
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
     return () => { alive = false; };
-  }, [title, movieUrl, site, inView]);
+  }, [title, inView]);
 
   return (
     <div ref={ref} className="absolute inset-0">
@@ -101,9 +111,18 @@ const MoviePoster = memo(function MoviePoster({ title, movieUrl, site }: { title
           <Loader2 className="w-6 h-6 text-red-600 animate-spin" />
         </div>
       ) : poster ? (
-        <motion.img initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          src={poster} alt={title} loading="lazy" decoding="async"
-          className="absolute inset-0 w-full h-full object-cover" />
+        <>
+          <motion.img initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            src={poster} alt={title} loading="lazy" decoding="async"
+            className="absolute inset-0 w-full h-full object-cover" />
+          {/* ── IMDB Rating Badge (top-right) ── */}
+          {rating && (
+            <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/80 backdrop-blur-sm rounded-md px-1.5 py-0.5 z-10 shadow-md">
+              <Star className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400" />
+              <span className="text-[10px] font-bold text-yellow-300 leading-none">{rating}</span>
+            </div>
+          )}
+        </>
       ) : (
         <div className="absolute inset-0 bg-zinc-900 flex flex-col items-center justify-center p-4 text-center">
           <Film className="w-12 h-12 text-zinc-800 mb-2" />
@@ -659,7 +678,7 @@ export default function HomePage() {
                       onClick={() => openDetails(movie.title, movie.url)}
                       className="group cursor-pointer">
                       <div className="relative aspect-[2/3] bg-white/5 rounded-2xl border border-white/5 overflow-hidden group-hover:border-red-600/50 transition-all shadow-xl shadow-black">
-                        <MoviePoster title={movie.title} movieUrl={movie.url} site={site} />
+                        <MoviePoster title={movie.title} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
                           <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg shadow-red-600/40 transform scale-75 group-hover:scale-100 transition-transform">
                             <Play className="w-6 h-6 text-white" />

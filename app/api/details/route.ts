@@ -37,6 +37,70 @@ function extractHrefLinks(
 }
 
 /**
+ * Broad watch-link extractor: scans ALL anchor tags in the HTML,
+ * strips inner HTML tags from link text, and matches watch-related
+ * domains or text. This fixes the [^<]* bug when button text
+ * contains icons like <i class="fas fa-play">.
+ */
+function extractWatchLinksFromHtml(
+  html: string
+): { name: string; url: string }[] {
+  const results: { name: string; url: string }[] = [];
+
+  // Match every <a href="...">...</a>
+  const re = /<a[^>]+href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(html)) !== null) {
+    const url = m[1].trim();
+    const rawText = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    if (!url) continue;
+
+    const lowerText = rawText.toLowerCase();
+    const lowerUrl = url.toLowerCase();
+
+    // Exclude obvious download-only and nav links
+    if (
+      lowerText.includes("download") &&
+      !lowerText.includes("watch") &&
+      !lowerText.includes("stream") &&
+      !lowerText.includes("online")
+    ) continue;
+    if (lowerText.match(/^(home|contact|dmca|privacy|about|login|register)$/)) continue;
+
+    const isWatchUrl =
+      lowerUrl.includes("onestream") ||
+      lowerUrl.includes("stream/page") ||
+      lowerUrl.includes("stream/video") ||
+      lowerUrl.includes("uptomkv") ||
+      lowerUrl.includes("uptodub") ||
+      lowerUrl.includes("/watch/") ||
+      lowerUrl.includes("/stream/") ||
+      lowerUrl.includes("/play/");
+
+    const isWatchText =
+      lowerText.includes("watch online") ||
+      lowerText.includes("watch now") ||
+      lowerText.includes("stream online") ||
+      lowerText.includes("stream now") ||
+      lowerText.includes("play online") ||
+      lowerText.includes("play now") ||
+      lowerText.includes("online player") ||
+      lowerText.includes("server 1") ||
+      lowerText.includes("server 2") ||
+      lowerText.includes("server 3");
+
+    if ((isWatchUrl || isWatchText) && !results.find((r) => r.url === url)) {
+      const displayName = rawText || "Watch Online";
+      results.push({ name: displayName, url });
+    }
+  }
+
+  return results;
+}
+
+/**
  * Moviesda31.com download chain:
  * /download/slug/ → download.moviespage.xyz/download/file/ID → movies.downloadpage.xyz/download/page/ID
  * Final page has: CDN links + play.onestream.today/stream/page/ID watch links
@@ -83,53 +147,47 @@ async function resolveMoviesdaChain(
     /href="(https?:\/\/(?:cdn|s\d+)\.[^"]+)"[^>]*>(Download[^<]+)/gi
   );
 
-  // Extract watch online links — moviesda uses play.onestream.today/stream/page/ID
-  const watchLinksRaw = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/(?:play|stream|watch|online|video)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-  );
+  // Extract watch online links from html3 AND html1 (movie page may have direct watch buttons)
+  const rawFromHtml3 = extractWatchLinksFromHtml(html3);
+  const rawFromHtml1 = extractWatchLinksFromHtml(html1);
+
+  // Merge, prefer html3 results first
+  const watchLinksRaw = [...rawFromHtml3];
+  for (const l of rawFromHtml1) {
+    if (!watchLinksRaw.find(r => r.url === l.url)) watchLinksRaw.push(l);
+  }
 
   console.log("Moviesda - raw watch links:", watchLinksRaw.length);
   watchLinksRaw.forEach((l, i) => console.log(`  ${i+1}. ${l.name}: ${l.url}`));
 
-  // Convert play.onestream.today links to stream-resolve API calls
-  const watchLinks = watchLinksRaw.map(link => {
-    if (link.url.includes("onestream.today") || link.url.includes("uptomkv.ch") || link.url.includes("uptodub.ch")) {
-      return {
-        name: link.name || "Watch Online",
-        url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`,
-      };
-    }
-    return link;
-  });
-
-  // De-duplicate
-  const uniqueWatch = watchLinks.filter((link, idx, self) =>
-    idx === self.findIndex(l => l.url === link.url)
-  );
+  // Convert streaming-service links to stream-resolve API calls
+  const uniqueWatch = watchLinksRaw
+    .map(link => {
+      const lowerUrl = link.url.toLowerCase();
+      if (
+        lowerUrl.includes("onestream.today") ||
+        lowerUrl.includes("uptomkv") ||
+        lowerUrl.includes("uptodub")
+      ) {
+        return {
+          name: link.name || "Watch Online",
+          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`,
+        };
+      }
+      return link;
+    })
+    .filter((link, idx, self) => idx === self.findIndex(l => l.url === link.url));
 
   console.log("Moviesda - final watch links:", uniqueWatch.length);
 
   if (dlLinks.length === 0) {
-    // Broader fallback
+    // Broader download fallback
     const allLinks = extractHrefLinks(
       html3,
       /href="(https?:\/\/[^"#]+)"[^>]*>\s*((?:Download|Watch|Stream|Play|Online|Video|Now)[^<]+)/gi
     );
     const dl = allLinks.filter(l => l.name.toLowerCase().includes("download"));
-    const wl = allLinks
-      .filter(l => {
-        const n = l.name.toLowerCase();
-        const u = l.url.toLowerCase();
-        return n.includes("watch") || n.includes("stream") || n.includes("play") || n.includes("online") || u.includes("onestream") || u.includes("uptomkv");
-      })
-      .map(link => ({
-        name: link.name || "Watch Online",
-        url: link.url.includes("onestream.today") || link.url.includes("uptomkv")
-          ? `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
-          : link.url,
-      }));
-    return { serverLinks: dl, watchLinks: wl };
+    return { serverLinks: dl, watchLinks: uniqueWatch };
   }
 
   return { serverLinks: dlLinks, watchLinks: uniqueWatch };
@@ -190,29 +248,35 @@ async function resolveIsaidubChain(
     /href="(https?:\/\/(?:dub\.uptodub\.[^"]+|s\d+\.dubshare\.[^"]+))"[^>]*>(Download[^<]+)/gi
   );
 
-  // Extract watch links — isaidub uses dub.onestream.today/stream/video/ID
-  const watchLinksRaw = extractHrefLinks(
-    html3,
-    /href="(https?:\/\/(?:dub\.onestream\.today|stream|watch|play)[^"]+)"[^>]*>([^<]*(?:Watch|Stream|Play|Online|Video|Now)[^<]*)/gi
-  );
+  // Extract watch links from html3 AND html1 (movie page may have direct watch buttons)
+  const rawFromHtml3 = extractWatchLinksFromHtml(html3);
+  const rawFromHtml1 = extractWatchLinksFromHtml(html1);
+
+  const watchLinksRaw = [...rawFromHtml3];
+  for (const l of rawFromHtml1) {
+    if (!watchLinksRaw.find(r => r.url === l.url)) watchLinksRaw.push(l);
+  }
 
   console.log("Isaidub - raw watch links:", watchLinksRaw.length);
   watchLinksRaw.forEach((l, i) => console.log(`  ${i+1}. ${l.name}: ${l.url}`));
 
-  // Convert to stream-resolve API calls
-  const watchLinks = watchLinksRaw.map(link => {
-    if (link.url.includes("onestream.today") || link.url.includes("uptodub.ch") || link.url.includes("dubshare")) {
-      return {
-        name: link.name || "Watch Online",
-        url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`,
-      };
-    }
-    return link;
-  });
-
-  const uniqueWatch = watchLinks.filter((link, idx, self) =>
-    idx === self.findIndex(l => l.url === link.url)
-  );
+  // Convert streaming-service links to stream-resolve API calls
+  const uniqueWatch = watchLinksRaw
+    .map(link => {
+      const lowerUrl = link.url.toLowerCase();
+      if (
+        lowerUrl.includes("onestream.today") ||
+        lowerUrl.includes("uptodub") ||
+        lowerUrl.includes("dubshare")
+      ) {
+        return {
+          name: link.name || "Watch Online",
+          url: `/api/stream-resolve?url=${encodeURIComponent(link.url)}`,
+        };
+      }
+      return link;
+    })
+    .filter((link, idx, self) => idx === self.findIndex(l => l.url === link.url));
 
   console.log("Isaidub - final watch links:", uniqueWatch.length);
 
@@ -222,19 +286,7 @@ async function resolveIsaidubChain(
       /href="(https?:\/\/[^"#]+)"[^>]*>\s*((?:Download|Watch|Stream|Play|Online|Video|Now)[^<]+)/gi
     );
     const dl = allLinks.filter(l => l.name.toLowerCase().includes("download"));
-    const wl = allLinks
-      .filter(l => {
-        const n = l.name.toLowerCase();
-        const u = l.url.toLowerCase();
-        return n.includes("watch") || n.includes("stream") || n.includes("play") || n.includes("online") || u.includes("onestream") || u.includes("uptodub");
-      })
-      .map(link => ({
-        name: link.name || "Watch Online",
-        url: link.url.includes("onestream.today") || link.url.includes("uptodub")
-          ? `/api/stream-resolve?url=${encodeURIComponent(link.url)}`
-          : link.url,
-      }));
-    return { serverLinks: dl, watchLinks: wl };
+    return { serverLinks: dl, watchLinks: uniqueWatch };
   }
 
   return { serverLinks: dlLinks, watchLinks: uniqueWatch };
